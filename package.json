@@ -1,0 +1,21 @@
+{
+  "name": "athensears",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:cms": "pnpm --filter cms develop",
+    "dev:web": "pnpm --filter web dev",
+    "dev": "pnpm --parallel --filter cms --filter web dev",
+    "build:cms": "pnpm --filter cms build",
+    "build:web": "pnpm --filter web build",
+    "build": "pnpm --parallel --filter cms --filter web build",
+    "start:cms": "pnpm --filter cms start",
+    "start:web": "pnpm --filter web preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.11.0"
+}
