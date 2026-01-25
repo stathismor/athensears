@@ -48,6 +48,9 @@ apps/cms/public/uploads/*
 apps/cms/.strapi-updater.json
 apps/cms/package-lock.json
 apps/cms/yarn.lock
+apps/cms/node_modules/.strapi/
+apps/cms/node_modules/.vite/
+apps/cms/node_modules/.cache/
 
 # Astro
 apps/web/.astro/

@@ -1,8 +1,8 @@
 {
   "name": "athensears",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Monorepo with Strapi CMS and Astro frontend",
+  "private": true,
   "scripts": {
     "dev:cms": "pnpm --filter cms develop",
     "dev:web": "pnpm --filter web dev",
@@ -12,10 +12,17 @@
     "build": "pnpm --parallel --filter cms --filter web build",
     "start:cms": "pnpm --filter cms start",
     "start:web": "pnpm --filter web preview",
+    "clean:cms": "rm -rf apps/cms/.cache apps/cms/.strapi apps/cms/dist apps/cms/build apps/cms/node_modules/.cache apps/cms/node_modules/.vite apps/cms/node_modules/.strapi && pnpm --filter cms build",
+    "format": "prettier --write \"**/*.{js,mjs,ts,tsx,astro,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,ts,tsx,astro,json,css,md}\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.11.0"
+  "packageManager": "pnpm@10.11.0",
+  "devDependencies": {
+    "prettier": "^3.8.1",
+    "prettier-plugin-astro": "^0.14.1"
+  }
 }
