@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(pnpm outdated:*)",
-      "Bash(timeout 20 pnpm dev:*)"
-    ]
-  }
-}

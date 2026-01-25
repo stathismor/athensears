@@ -37,6 +37,9 @@ Thumbs.db
 *.sublime-workspace
 .fleet/
 
+# Claude Code local settings (optional - remove this line if you want to commit them)
+.claude/settings.local.json
+
 # Strapi
 apps/cms/.cache/
 apps/cms/.strapi/

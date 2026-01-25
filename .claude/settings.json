@@ -47,7 +47,11 @@
       "Bash(pkill:*)",
       "Bash(ls:*)",
       "Bash(docker ps:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(pnpm outdated:*)",
+      "Bash(timeout *)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)"
     ]
   }
 }
