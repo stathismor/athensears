@@ -1,0 +1,16 @@
+node_modules
+.pnpm-store
+apps/cms/.cache
+apps/cms/.strapi
+apps/cms/.tmp
+apps/cms/build
+apps/web/dist
+apps/web/.astro
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.git
+.gitignore
+README.md
