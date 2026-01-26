@@ -69,3 +69,6 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# Beads (using Claude Code tasks instead)
+.beads/
