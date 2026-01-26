@@ -1,5 +1,74 @@
 ---
 import '../styles/global.css';
+
+interface Venue {
+	id: number;
+	name: string;
+	address?: string;
+	website?: string;
+	neighborhood?: string;
+}
+
+interface Gig {
+	id: number;
+	title: string;
+	date: string;
+	time_display?: string;
+	price?: string;
+	description?: string;
+	venue?: Venue;
+}
+
+interface StrapiResponse {
+	data: Gig[];
+}
+
+let gigs: Gig[] = [];
+let error: string | null = null;
+
+try {
+	const today = new Date().toISOString().split('T')[0];
+	const response = await fetch(
+		`http://localhost:1337/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}`
+	);
+	if (!response.ok) {
+		throw new Error(`HTTP ${response.status}`);
+	}
+	const data: StrapiResponse = await response.json();
+	gigs = data.data;
+} catch (e) {
+	error = 'Could not load gigs. Make sure the CMS is running.';
+}
+
+// Group gigs by month
+function groupByMonth(gigs: Gig[]): Map<string, Gig[]> {
+	const grouped = new Map<string, Gig[]>();
+	for (const gig of gigs) {
+		const date = new Date(gig.date);
+		const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+		if (!grouped.has(monthKey)) {
+			grouped.set(monthKey, []);
+		}
+		grouped.get(monthKey)!.push(gig);
+	}
+	return grouped;
+}
+
+function getMonthLabel(monthKey: string): string {
+	const [year, month] = monthKey.split('-');
+	const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+	return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+function formatDate(dateStr: string): { weekday: string; day: string } {
+	const date = new Date(dateStr);
+	return {
+		weekday: date.toLocaleDateString('en-GB', { weekday: 'short' }),
+		day: date.getDate().toString(),
+	};
+}
+
+const gigsByMonth = groupByMonth(gigs);
 ---
 
 <html lang="en">
@@ -9,9 +78,111 @@ import '../styles/global.css';
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
+		<meta name="description" content="Discover live music events and gigs happening in Athens, Greece" />
+		<title>Athens Gigs - Live Music in Athens</title>
 	</head>
-	<body>
-		<h1>Astro</h1>
+	<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+		<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+			<header class="mb-10 sm:mb-14">
+				<h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">Athens Gigs</h1>
+				<p class="text-zinc-400 mt-2 sm:mt-3 text-base sm:text-lg">Live music events in Athens</p>
+			</header>
+
+			<main>
+				{error && (
+					<div class="text-red-400 bg-red-950/50 border border-red-900/50 px-4 py-3 rounded-lg">
+						{error}
+					</div>
+				)}
+
+				{!error && gigs.length === 0 && (
+					<p class="text-zinc-500 text-lg">No upcoming gigs found.</p>
+				)}
+
+				{!error && gigs.length > 0 && (
+					<div class="space-y-10 sm:space-y-12">
+						{Array.from(gigsByMonth.entries()).map(([monthKey, monthGigs]) => (
+							<section>
+								<h2 class="text-sm sm:text-base font-semibold text-zinc-500 mb-4 uppercase tracking-widest">
+									{getMonthLabel(monthKey)}
+								</h2>
+								<ul class="divide-y divide-zinc-800/60">
+									{monthGigs.map((gig) => {
+										const { weekday, day } = formatDate(gig.date);
+										return (
+											<li class="py-4 sm:py-5 hover:bg-zinc-900/30 -mx-3 px-3 rounded-lg transition-colors">
+												{/* Mobile layout */}
+												<div class="sm:hidden">
+													<div class="flex items-center justify-between mb-1">
+														<span class="text-zinc-500 text-sm">
+															{weekday} {day} {gig.time_display && `· ${gig.time_display}`}
+														</span>
+														{gig.price && (
+															<span class="text-zinc-500 text-sm">{gig.price}</span>
+														)}
+													</div>
+													<div class="font-medium text-zinc-100 mb-1">{gig.title}</div>
+													{gig.venue && (
+														<div class="text-zinc-400 text-sm">
+															{gig.venue.website ? (
+																<a
+																	href={gig.venue.website}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	class="hover:text-zinc-200 underline underline-offset-2 decoration-zinc-700"
+																>
+																	{gig.venue.name}
+																</a>
+															) : (
+																<span>{gig.venue.name}</span>
+															)}
+														</div>
+													)}
+												</div>
+
+												{/* Desktop layout */}
+												<div class="hidden sm:flex items-baseline gap-4">
+													<div class="w-20 flex-shrink-0 text-zinc-500 text-sm tabular-nums">
+														<span class="font-medium">{weekday}</span>
+														<span class="ml-1.5">{day}</span>
+													</div>
+													<div class="w-16 flex-shrink-0 text-zinc-500 text-sm tabular-nums">
+														{gig.time_display || '—'}
+													</div>
+													<div class="flex-grow min-w-0">
+														<span class="font-medium text-zinc-100">{gig.title}</span>
+													</div>
+													<div class="flex-shrink-0 text-sm text-zinc-400 max-w-[140px] truncate">
+														{gig.venue?.website ? (
+															<a
+																href={gig.venue.website}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="hover:text-zinc-200 underline underline-offset-2 decoration-zinc-700"
+															>
+																{gig.venue.name}
+															</a>
+														) : gig.venue ? (
+															<span>{gig.venue.name}</span>
+														) : null}
+													</div>
+													<div class="w-16 flex-shrink-0 text-right text-sm text-zinc-500 tabular-nums">
+														{gig.price || '—'}
+													</div>
+												</div>
+											</li>
+										);
+									})}
+								</ul>
+							</section>
+						))}
+					</div>
+				)}
+			</main>
+
+			<footer class="mt-16 sm:mt-20 pt-8 border-t border-zinc-800/60 text-zinc-600 text-sm">
+				<p>&copy; {new Date().getFullYear()} Athens Gigs</p>
+			</footer>
+		</div>
 	</body>
 </html>

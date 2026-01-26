@@ -1,0 +1,31 @@
+{
+  "kind": "collectionType",
+  "collectionName": "venues",
+  "info": {
+    "singularName": "venue",
+    "pluralName": "venues",
+    "displayName": "Venue",
+    "description": "A venue where gigs take place"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "maxLength": 255
+    },
+    "address": {
+      "type": "text"
+    },
+    "website": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "neighborhood": {
+      "type": "string",
+      "maxLength": 100
+    }
+  }
+}
