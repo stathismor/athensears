@@ -33,12 +33,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/cms/package.json ./apps/cms/
 RUN pnpm install --frozen-lockfile --prod
 
-# Copy built application
-COPY --from=base /app/apps/cms/dist ./apps/cms/dist
+# Copy built application (compiled .js files, not source .ts files)
+COPY --from=base /app/apps/cms/dist/config ./apps/cms/config
+COPY --from=base /app/apps/cms/dist/src ./apps/cms/src
 COPY --from=base /app/apps/cms/public ./apps/cms/public
-COPY --from=base /app/apps/cms/config ./apps/cms/config
-COPY --from=base /app/apps/cms/database ./apps/cms/database
-COPY --from=base /app/apps/cms/src ./apps/cms/src
+COPY --from=base /app/apps/cms/package.json ./apps/cms/
 
 WORKDIR /app/apps/cms
 
