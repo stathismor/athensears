@@ -25,5 +25,5 @@ console.log('\n# Additional Railway variables:');
 console.log('DATABASE_CLIENT=postgres');
 console.log('DATABASE_URL=${{Postgres.DATABASE_URL}}');
 console.log('HOST=0.0.0.0');
-console.log('PORT=${{PORT}}');
 console.log('NODE_ENV=production');
+console.log('\n# Note: PORT is automatically provided by Railway - do NOT set it manually');

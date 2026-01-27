@@ -38,7 +38,6 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 
 # Server
 HOST=0.0.0.0
-PORT=${{PORT}}
 NODE_ENV=production
 
 # Strapi Secrets (GENERATE NEW VALUES!)
@@ -49,6 +48,8 @@ TRANSFER_TOKEN_SALT=your-generated-salt-here
 JWT_SECRET=your-generated-jwt-secret-here
 ENCRYPTION_KEY=your-generated-encryption-key-here
 ```
+
+**Note**: Do NOT set `PORT` manually - Railway automatically provides it and Strapi will use it.
 
 #### Generate Secure Secrets
 
