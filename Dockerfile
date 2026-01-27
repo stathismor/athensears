@@ -37,6 +37,7 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=base /app/apps/cms/dist/config ./apps/cms/config
 COPY --from=base /app/apps/cms/dist/src ./apps/cms/src
 COPY --from=base /app/apps/cms/public ./apps/cms/public
+COPY --from=base /app/apps/cms/.strapi ./apps/cms/.strapi
 COPY --from=base /app/apps/cms/package.json ./apps/cms/
 
 WORKDIR /app/apps/cms
