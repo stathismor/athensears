@@ -1,13 +1,28 @@
-## Issue Tracking
+# Agent Instructions
 
-This project uses **bd (beads)** for issue tracking.
-Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for auto-injection.
+## Git Commits
 
-**Quick reference:**
+**CRITICAL**: All git commits in this project MUST follow [Conventional Commits](https://www.conventionalcommits.org/) format.
 
-- `bd ready` - Find unblocked work
-- `bd create "Title" --type task --priority 2` - Create issue
-- `bd close <id>` - Complete work
-- `bd sync` - Sync with git (run at session end)
+Format: `<type>: <description>`
 
-For full workflow details: `bd prime`
+Allowed types:
+- `feat`: New features or functionality
+- `fix`: Bug fixes
+- `chore`: Maintenance, config, dependencies, cleanup
+
+Rules:
+- No scopes (no parentheses)
+- Lowercase type
+- No period at end
+- Imperative mood (e.g., "add" not "added")
+- Keep description concise
+
+Examples:
+```
+feat: add docker-compose for local development
+fix: postgres connection timeout
+chore: update dependencies
+```
+
+See `.claude/skills/conventional-commits/SKILL.md` for complete details.
