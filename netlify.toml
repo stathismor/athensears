@@ -1,0 +1,27 @@
+[build]
+  # Build command (runs from root directory)
+  command = "pnpm install && pnpm --filter web build"
+
+  # Publish directory (relative to repository root)
+  publish = "apps/web/dist"
+
+[build.environment]
+  # Node version
+  NODE_VERSION = "20"
+
+  # Enable pnpm (Netlify automatically detects pnpm-lock.yaml)
+  PNPM_VERSION = "10.11.0"
+
+# Redirect rules (optional - add your own)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security (optional but recommended)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
