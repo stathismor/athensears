@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: athensears-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: strapi
+      POSTGRES_USER: strapi
+      POSTGRES_PASSWORD: strapi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cms:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: athensears-cms
+    restart: unless-stopped
+    environment:
+      # Database
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: strapi
+      DATABASE_USERNAME: strapi
+      DATABASE_PASSWORD: strapi
+      # Server
+      HOST: 0.0.0.0
+      PORT: 1337
+      NODE_ENV: development
+      # Secrets (change these in production!)
+      APP_KEYS: ${APP_KEYS:-key1,key2,key3,key4}
+      API_TOKEN_SALT: ${API_TOKEN_SALT:-tobemodified}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-tobemodified}
+      TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:-tobemodified}
+      JWT_SECRET: ${JWT_SECRET:-tobemodified}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-tobemodified}
+    ports:
+      - "1337:1337"
+    volumes:
+      - ./apps/cms/public/uploads:/app/apps/cms/public/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

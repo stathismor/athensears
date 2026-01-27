@@ -1,4 +1,4 @@
-# Use Node.js 20 LTS
+# Development Dockerfile for Strapi CMS
 FROM node:20-alpine
 
 # Install pnpm
@@ -11,24 +11,17 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/cms/package.json ./apps/cms/
 
-# Install dependencies
+# Install all dependencies (including dev dependencies)
 RUN pnpm install --frozen-lockfile
 
 # Copy application code
 COPY apps/cms ./apps/cms
 
-# Build Strapi
-WORKDIR /app/apps/cms
-RUN pnpm build
-
-# Remove development dependencies to reduce image size
-RUN pnpm install --frozen-lockfile --prod
-
 # Expose Strapi port
 EXPOSE 1337
 
-# Set NODE_ENV
-ENV NODE_ENV=production
+# Set working directory to CMS
+WORKDIR /app/apps/cms
 
-# Start Strapi
-CMD ["pnpm", "start"]
+# Start Strapi in development mode
+CMD ["pnpm", "develop"]
