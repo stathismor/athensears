@@ -50,5 +50,32 @@ services:
       postgres:
         condition: service_healthy
 
+  gig-crawler:
+    build:
+      context: .
+      dockerfile: apps/gig-crawler/Dockerfile.dev
+    container_name: athensears-gig-crawler
+    restart: unless-stopped
+    environment:
+      # Strapi CMS (using docker network)
+      STRAPI_API_URL: http://cms:1337
+      STRAPI_API_TOKEN: ${STRAPI_API_TOKEN}
+      # Brave AI Grounding API
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+      # Server
+      PORT: 3000
+      NODE_ENV: development
+      # Cron (disabled by default for local dev, uncomment to enable)
+      # CRON_SCHEDULE: "0 2 * * *"
+      TZ: Europe/Athens
+      LOG_LEVEL: debug
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/gig-crawler/src:/app/apps/gig-crawler/src
+      - ./apps/gig-crawler/package.json:/app/apps/gig-crawler/package.json
+    depends_on:
+      - cms
+
 volumes:
   postgres_data:
