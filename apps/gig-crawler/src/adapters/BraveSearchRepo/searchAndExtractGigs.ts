@@ -1,89 +1,44 @@
 import axios from 'axios';
 import { z } from 'zod';
-import { logger } from '../utils/logger.js';
-import { braveGigSchema } from '../models/braveGig.js';
-import { gigSchema, type Gig } from '../models/gig.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { logger } from '../../utils/logger.js';
+import { braveGigSchema } from '../../models/braveGig.js';
+import { gigSchema, type Gig } from '../../models/gig.js';
 
 const BRAVE_AI_URL = 'https://api.search.brave.com/res/v1/chat/completions';
 
-/**
- * Search for Athens music events and extract structured data
- * Uses Brave AI Grounding API to search + extract in one call
- */
-export async function searchAndExtractGigs(apiKey: string): Promise<Gig[]> {
-  try {
-    logger.info('Searching for Athens gigs using Brave AI Grounding API...');
-
-    const currentDate = new Date();
-    const nextMonth = new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const today = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
-    const endDate = nextMonth.toISOString().split('T')[0]; // YYYY-MM-DD
-
-    const prompt = buildExtractionPrompt(today, endDate);
-
-    const response = await axios.post(
-      BRAVE_AI_URL,
-      {
-        model: 'brave',
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        stream: false,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-subscription-token': apiKey,
-        },
-        timeout: 120000, // 2 minutes - Brave AI needs time to search + process
-      }
-    );
-
-    const assistantMessage = response.data.choices?.[0]?.message?.content || '';
-
-    // Log the raw response for debugging
-    logger.debug({ assistantMessage }, 'Raw Brave AI response');
-
-    // Parse the AI response to extract structured gig data
-    const extractedGigs = parseAIResponse(assistantMessage);
-
-    logger.info({ count: extractedGigs.length }, 'Brave AI search and extraction completed');
-    return extractedGigs;
-  } catch (error) {
-    logger.error({ error }, 'Failed to search and extract gigs with Brave AI');
-    throw new Error(
-      `Brave AI search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
-}
+// Get the directory of the current module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
- * Build the prompt for Brave AI to search and extract gig data
+ * Build the prompt for Brave AI by reading from markdown file
  */
 function buildExtractionPrompt(startDate: string, endDate: string): string {
-  return `Search the web for upcoming live music events, concerts, and gigs in Athens, Greece from ${startDate} to ${endDate}.
+  const promptPath = join(__dirname, '../../prompts/gig-extraction.md');
+  const promptTemplate = readFileSync(promptPath, 'utf-8');
 
-Find 5-10 events and return them as a JSON array with this format:
-[
-  {
-    "title": "Event name",
-    "date": "YYYY-MM-DD format",
-    "venue": "Venue name and location",
-    "price": "Ticket price with € symbol"
+  // Extract the actual prompt content (between ## Prompt and ## Requirements)
+  const promptMatch = promptTemplate.match(/## Prompt\n\n([\s\S]*?)\n\n## Requirements/);
+  const requirementsMatch = promptTemplate.match(/## Requirements\n\n([\s\S]*?)\n\n## Example/);
+  const exampleMatch = promptTemplate.match(/## Example Output\n\n```json\n([\s\S]*?)\n```/);
+
+  if (!promptMatch || !requirementsMatch) {
+    throw new Error('Failed to parse prompt template');
   }
-]
 
-Requirements:
-- Only include confirmed upcoming events starting from ${startDate} onwards
-- Events must be in Athens, Greece
-- Include: concerts, live music, DJ sets, band performances
-- Date format: YYYY-MM-DD (e.g., "2026-02-15")
-- Return ONLY the JSON array, no other text
+  const prompt = promptMatch[1]
+    .replace(/{{startDate}}/g, startDate)
+    .replace(/{{endDate}}/g, endDate);
 
-Example: [{"title":"Jazz Night","date":"2026-02-01","venue":"Six Dogs, Monastiraki","price":"€10"}]`;
+  const requirements = requirementsMatch[1]
+    .replace(/{{startDate}}/g, startDate);
+
+  const example = exampleMatch ? `\n\nExample: ${exampleMatch[1]}` : '';
+
+  return `${prompt}\n\n${requirements}${example}`;
 }
 
 /**
@@ -165,7 +120,9 @@ function parseAIResponse(content: string): Gig[] {
  * Brave returns: {title, date, venue: "string", price}
  * We need: {title, date, venue: {name, address, ...}, price, time_display}
  */
-function transformBraveGigFormat(braveGig: z.infer<typeof braveGigSchema>): Omit<Gig, 'time_display'> & { time_display?: string } {
+function transformBraveGigFormat(
+  braveGig: z.infer<typeof braveGigSchema>
+): Omit<Gig, 'time_display'> & { time_display?: string } {
   // Parse date and add time if needed
   let date = braveGig.date;
   if (date && !date.includes('T')) {
@@ -192,4 +149,58 @@ function transformBraveGigFormat(braveGig: z.infer<typeof braveGigSchema>): Omit
     description: braveGig.description || `Live music event at ${venueData.name}`,
     venue: venueData,
   };
+}
+
+/**
+ * Search for Athens music events and extract structured data
+ * Uses Brave AI Grounding API to search + extract in one call
+ */
+export async function searchAndExtractGigs(apiKey: string): Promise<Gig[]> {
+  try {
+    logger.info('Searching for Athens gigs using Brave AI Grounding API...');
+
+    const currentDate = new Date();
+    const nextMonth = new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const today = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    const endDate = nextMonth.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    const prompt = buildExtractionPrompt(today, endDate);
+
+    const response = await axios.post(
+      BRAVE_AI_URL,
+      {
+        model: 'brave',
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        stream: false,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-subscription-token': apiKey,
+        },
+        timeout: 120000, // 2 minutes - Brave AI needs time to search + process
+      }
+    );
+
+    const assistantMessage = response.data.choices?.[0]?.message?.content || '';
+
+    // Log the raw response for debugging
+    logger.debug({ assistantMessage }, 'Raw Brave AI response');
+
+    // Parse the AI response to extract structured gig data
+    const extractedGigs = parseAIResponse(assistantMessage);
+
+    logger.info({ count: extractedGigs.length }, 'Brave AI search and extraction completed');
+    return extractedGigs;
+  } catch (error) {
+    logger.error({ error }, 'Failed to search and extract gigs with Brave AI');
+    throw new Error(
+      `Brave AI search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 }

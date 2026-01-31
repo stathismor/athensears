@@ -2,12 +2,19 @@ import express from 'express';
 import cron from 'node-cron';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { searchAndExtractGigs } from './services/searchService.js';
-import { createStrapiClient } from './services/strapiService.js';
-import { sync } from './services/syncService.js';
+import { createBraveSearchRepo } from './adapters/BraveSearchRepo/index.js';
+import { createStrapiRepo } from './adapters/StrapiRepo/index.js';
+import { createSyncGigsCommand } from './commands/SyncGigsCommand.js';
 
-// Create Strapi client
-const strapiClient = createStrapiClient(config.strapi.apiUrl, config.strapi.apiToken);
+// ========== Composition Root ==========
+// Wire up dependencies: create adapters and inject into command
+
+// Create adapters (implementations of ports)
+const searchRepo = createBraveSearchRepo(config.search.braveApiKey);
+const strapiRepo = createStrapiRepo(config.strapi.apiUrl, config.strapi.apiToken);
+
+// Create command with injected dependencies
+const syncCommand = createSyncGigsCommand(searchRepo, strapiRepo);
 
 logger.info('Services initialized successfully');
 
@@ -32,10 +39,7 @@ app.post('/api/sync', async (req, res) => {
     logger.info('Manual sync triggered via API');
 
     // Start sync in background and return immediately
-    const syncPromise = sync({
-      searchAndExtractGigs: () => searchAndExtractGigs(config.search.braveApiKey),
-      strapiClient,
-    });
+    const syncPromise = syncCommand.execute();
 
     res.json({
       status: 'in_progress',
@@ -70,10 +74,7 @@ if (config.cron.schedule) {
     async () => {
       try {
         logger.info('Cron job triggered: starting automated sync');
-        const result = await sync({
-          searchAndExtractGigs: () => searchAndExtractGigs(config.search.braveApiKey),
-          strapiClient,
-        });
+        const result = await syncCommand.execute();
         logger.info({ result }, 'Automated sync completed successfully');
       } catch (error) {
         logger.error({ error }, 'Automated sync failed');
