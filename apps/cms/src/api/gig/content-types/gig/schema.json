@@ -31,6 +31,10 @@
     "description": {
       "type": "text"
     },
+    "url": {
+      "type": "string",
+      "maxLength": 500
+    },
     "venue": {
       "type": "relation",
       "relation": "manyToOne",
