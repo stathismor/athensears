@@ -1,11 +1,39 @@
 import axios from "axios";
 import { JSDOM, VirtualConsole } from "jsdom";
 import { Readability } from "@mozilla/readability";
+import * as cheerio from "cheerio";
 import type { ScraperPort } from "../../ports/ScraperPort.js";
 import type { ScrapedContent } from "../../models/scrapedContent.js";
 import { logger } from "../../utils/logger.js";
 
 export class ReadabilityAdapter implements ScraperPort {
+  /**
+   * Extract all links from HTML that are from the same domain
+   */
+  private extractLinks(html: string, baseUrl: string): string[] {
+    const $ = cheerio.load(html);
+    const links = new Set<string>();
+
+    $("a[href]").each((i, el) => {
+      const href = $(el).attr("href");
+      if (href) {
+        try {
+          const absoluteUrl = new URL(href, baseUrl).toString();
+          // Only include links from same domain
+          if (
+            new URL(absoluteUrl).hostname === new URL(baseUrl).hostname
+          ) {
+            links.add(absoluteUrl);
+          }
+        } catch (e) {
+          // Skip invalid URLs
+        }
+      }
+    });
+
+    return Array.from(links);
+  }
+
   async scrape(url: string): Promise<ScrapedContent> {
     logger.info({ url }, "Scraping URL");
 
@@ -19,6 +47,10 @@ export class ReadabilityAdapter implements ScraperPort {
       });
 
       const html = response.data;
+
+      // Extract links with Cheerio
+      const links = this.extractLinks(html, url);
+      logger.info({ url, linkCount: links.length }, "Extracted links");
 
       // Create a virtual console that suppresses JSDOM errors
       const virtualConsole = new VirtualConsole();
@@ -44,6 +76,7 @@ export class ReadabilityAdapter implements ScraperPort {
           text,
           rawHtml: html,
           success: true,
+          links,
         };
       } else {
         logger.warn({ url }, "No text extracted, keeping raw HTML");
@@ -52,6 +85,7 @@ export class ReadabilityAdapter implements ScraperPort {
           text: undefined,
           rawHtml: html,
           success: true,
+          links,
         };
       }
     } catch (error) {

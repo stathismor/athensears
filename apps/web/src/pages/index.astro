@@ -33,7 +33,7 @@ const strapiUrl = import.meta.env.PUBLIC_STRAPI_URL || 'http://localhost:1337';
 try {
   const today = new Date().toISOString().split('T')[0];
   const response = await fetch(
-    `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}`
+    `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}&pagination[limit]=100`
   );
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);

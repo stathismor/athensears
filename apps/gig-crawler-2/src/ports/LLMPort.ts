@@ -17,4 +17,12 @@ export interface LLMPort {
    * Extract structured gig data from multiple scraped pages in one call (Pass 2 - Batch)
    */
   extractGigsFromMultiplePages(scrapedContents: ScrapedContent[]): Promise<Gig[]>;
+
+  /**
+   * Filter links to identify event detail URLs (Pass 2)
+   */
+  filterEventDetailUrls(
+    links: string[],
+    pageContext: { url: string; title?: string }
+  ): Promise<string[]>;
 }

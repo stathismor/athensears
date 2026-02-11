@@ -6,6 +6,7 @@ export const ScrapedContentSchema = z.object({
   rawHtml: z.string().optional(),
   success: z.boolean(),
   error: z.string().optional(),
+  links: z.array(z.string()).optional(),
 });
 
 export type ScrapedContent = z.infer<typeof ScrapedContentSchema>;

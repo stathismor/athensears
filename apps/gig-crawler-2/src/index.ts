@@ -59,7 +59,8 @@ app.get("/health", (req, res) => {
 
 // Manual sync endpoint (non-blocking)
 app.post("/api/sync", (req, res) => {
-  const clearExisting = req.query.clear === "true";
+  // Default to clearing existing data (use ?clear=false to keep old data)
+  const clearExisting = req.query.clear !== "false";
 
   if (isSyncRunning) {
     return res.status(409).json({
@@ -80,7 +81,7 @@ app.post("/api/sync", (req, res) => {
     status: "started",
     message: clearExisting
       ? "Sync started (clearing existing gigs first)"
-      : "Sync started in background",
+      : "Sync started in background (keeping existing data)",
   });
 });
 

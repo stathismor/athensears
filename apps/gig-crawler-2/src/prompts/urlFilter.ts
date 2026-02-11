@@ -2,11 +2,25 @@ export const URL_FILTER_PROMPT = (searchResults: string) => `You are helping to 
 
 Below are search results from a web search. Your task is to filter these results and identify the most promising URLs that are likely to contain information about upcoming live music events in Athens.
 
+**IMPORTANT - Genre Focus:**
+We are ONLY interested in these genres:
+- Rock, Metal, Indie, Alternative
+- Folk, Post-rock, Shoegaze
+- Dark, Goth, Post-punk
+- Experimental, Noise, Ambient
+
+EXCLUDE these genres:
+- Pop (Greek or international)
+- Dance, Techno, House, Rave
+- Hip-hop, Trap, Rap
+- Greek popular music (λαϊκά, έντεχνο)
+- Mainstream/commercial events
+
 **Selection Criteria (prioritize in this order):**
-1. **Greek event sites** (e.g., viva.gr, more.com, ticketservices.gr, Athens Voice, lifo.gr)
-2. **Venue websites** from Athens music venues with upcoming shows
-3. **Event calendars** or "what's on" pages
-4. **Athens music blogs** or news sites with event listings
+1. **Greek event sites** (e.g., viva.gr, more.com, ticketservices.gr, Athens Voice, lifo.gr, rocking.gr)
+2. **Venue websites** from Athens rock/indie/alternative music venues with upcoming shows
+3. **Event calendars** or "what's on" pages focused on alternative music
+4. **Athens music blogs** or news sites with rock/indie event listings
 5. **International event aggregators** (e.g., bandsintown, songkick) - only if no better options
 
 **Exclude:**
@@ -15,6 +29,7 @@ Below are search results from a web search. Your task is to filter these results
 - Ticket resale/marketplace sites
 - URLs about past events
 - Non-Athens or non-Greece locations
+- Pop, dance, or mainstream music venues/events
 
 **Diversity:** Try to select URLs from different sources to maximize variety of events found.
 

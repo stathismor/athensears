@@ -156,8 +156,19 @@ export class StrapiAdapter implements GigsPort {
       {
         maxAttempts: 3,
         onError: (error, attempt) => {
+          // Extract detailed error info from Axios errors
+          let errorDetail = error;
+          if (error && typeof error === 'object' && 'response' in error) {
+            const axiosError = error as any;
+            errorDetail = {
+              status: axiosError.response?.status,
+              statusText: axiosError.response?.statusText,
+              data: axiosError.response?.data,
+              message: axiosError.message,
+            };
+          }
           logger.warn(
-            { error, attempt, gig: gig.title },
+            { error: errorDetail, attempt, gig: gig.title, gigData: toStrapiGig(gig, venueId) },
             "Create gig attempt failed"
           );
         },

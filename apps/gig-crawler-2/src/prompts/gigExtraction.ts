@@ -9,8 +9,22 @@ export const GIG_EXTRACTION_PROMPT = (
 
 ${content}
 
+**CRITICAL - Genre Filter:**
+ONLY extract events from these genres:
+- Rock, Metal, Indie, Alternative
+- Folk, Post-rock, Shoegaze
+- Dark, Goth, Post-punk
+- Experimental, Noise, Ambient, Jazz
+
+SKIP events from these genres:
+- Pop (Greek or international)
+- Dance, Techno, House, Rave, EDM
+- Hip-hop, Trap, Rap
+- Greek popular music (λαϊκά, έντεχνο, ελληνικό pop)
+- Mainstream/commercial pop acts
+
 **Task:**
-Extract all upcoming music events from this content. For each event, extract the following fields:
+Extract all upcoming music events from this content that match the genre criteria. For each event, extract the following fields:
 
 - **title** (required): Name of the event, band/artist name, or concert title
 - **date** (required): Event date and time in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
