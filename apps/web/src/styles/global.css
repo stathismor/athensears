@@ -3,6 +3,61 @@
 @theme {
 	--font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
 		"Helvetica Neue", Arial, sans-serif;
+
+	--color-orange: #faa916;
+	--color-orange-100: #321d01;
+	--color-orange-200: #6a4602;
+	--color-orange-300: #9f6803;
+	--color-orange-400: #d48b04;
+	--color-orange-500: #faa916;
+	--color-orange-600: #fbbb43;
+	--color-orange-700: #fccc72;
+	--color-orange-800: #fddda1;
+	--color-orange-900: #feeed0;
+
+	--color-white: #fbfffe;
+	--color-white-100: #00654c;
+	--color-white-200: #00ca97;
+	--color-white-300: #30ffcb;
+	--color-white-400: #95ffe4;
+	--color-white-500: #fbfffe;
+	--color-white-600: #fbfffe;
+	--color-white-700: #fcfffe;
+	--color-white-800: #fdfffe;
+	--color-white-900: #feffff;
+
+	--color-dim_grey: #6d676e;
+	--color-dim_grey-100: #161516;
+	--color-dim_grey-200: #2c2a2c;
+	--color-dim_grey-300: #423e42;
+	--color-dim_grey-400: #575358;
+	--color-dim_grey-500: #6d676e;
+	--color-dim_grey-600: #8b858c;
+	--color-dim_grey-700: #a8a4a9;
+	--color-dim_grey-800: #c5c2c6;
+	--color-dim_grey-900: #e2e1e2;
+
+	--color-carbon_black: #1b1b1e;
+	--color-carbon_black-100: #050506;
+	--color-carbon_black-200: #0b0b0c;
+	--color-carbon_black-300: #101012;
+	--color-carbon_black-400: #151518;
+	--color-carbon_black-500: #1b1b1e;
+	--color-carbon_black-600: #46464d;
+	--color-carbon_black-700: #71717d;
+	--color-carbon_black-800: #a0a0a9;
+	--color-carbon_black-900: #cfcfd4;
+
+	--color-deep_crimson: #96031a;
+	--color-deep_crimson-100: #1e0105;
+	--color-deep_crimson-200: #3c010a;
+	--color-deep_crimson-300: #5a020f;
+	--color-deep_crimson-400: #780214;
+	--color-deep_crimson-500: #96031a;
+	--color-deep_crimson-600: #dc0425;
+	--color-deep_crimson-700: #fb2d4c;
+	--color-deep_crimson-800: #fc7388;
+	--color-deep_crimson-900: #feb9c3;
 }
 
 html {
