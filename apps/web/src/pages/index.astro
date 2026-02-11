@@ -30,6 +30,7 @@ let error: string | null = null;
 const strapiUrl = import.meta.env.PUBLIC_STRAPI_URL || 'http://localhost:1337';
 
 try {
+<<<<<<< Updated upstream
 	const today = new Date().toISOString().split('T')[0];
 	const response = await fetch(
 		`${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}`
@@ -39,6 +40,17 @@ try {
 	}
 	const data: StrapiResponse = await response.json();
 	gigs = data.data;
+=======
+  const today = new Date().toISOString().split('T')[0];
+  const response = await fetch(
+    `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}&pagination[limit]=100`
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const data: StrapiResponse = await response.json();
+  gigs = data.data;
+>>>>>>> Stashed changes
 } catch (e) {
 	error = 'Could not load gigs. Make sure the CMS is running.';
 }
