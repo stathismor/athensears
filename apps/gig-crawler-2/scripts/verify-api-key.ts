@@ -3,7 +3,7 @@
  */
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const apiKey = 'AIzaSyDAj6nMueA6-Z87HmPy8wi48sTS7Y5Uz9Q';
+const apiKey = '<API_KEY>';
 
 if (!apiKey) {
   console.error('❌ Error: GEMINI_API_KEY environment variable not set');
