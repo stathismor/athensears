@@ -1,158 +1,260 @@
-import { logger } from '../utils/logger.js';
-import { SyncResult } from '../types/index.js';
-import { Gig } from '../models/gig.js';
-import { StrapiGig } from '../models/strapiGig.js';
-import { StrapiVenue } from '../models/strapiVenue.js';
 import type { SearchPort } from '../ports/SearchPort.js';
+import type { SearchOptions } from '../ports/SearchPort.js';
+import type { ScraperPort } from '../ports/ScraperPort.js';
+import type { LLMPort } from '../ports/LLMPort.js';
 import type { GigsPort } from '../ports/GigsPort.js';
+import type { Gig } from '../models/gig.js';
+import type { SearchResult } from '../models/searchResult.js';
+import { logger } from '../utils/logger.js';
 
-/**
- * Command to sync gigs from external sources to Strapi
- * Contains all business logic for venue matching, deduplication, and gig creation
- */
-export function createSyncGigsCommand(
-  searchPort: SearchPort,
-  gigsPort: GigsPort
-) {
-  /**
-   * Execute the sync workflow
-   * Orchestrates search, extraction, venue matching, and gig creation
-   */
-  async function execute(): Promise<SyncResult> {
-    const startTime = Date.now();
+export interface SyncStats {
+  searchResults: number;
+  filteredUrls: number;
+  scrapedUrls: number;
+  gigsExtracted: number;
+  gigsCreated: number;
+  gigsSkipped: number;
+  errors: number;
+}
+
+export class SyncGigsCommand {
+  constructor(
+    private readonly search: SearchPort,
+    private readonly scraper: ScraperPort,
+    private readonly llm: LLMPort,
+    private readonly gigs: GigsPort
+  ) {}
+
+  async execute(options: { clearExisting?: boolean } = {}): Promise<SyncStats> {
+    logger.info('Starting gig sync (three-pass approach with auto-detection)');
+
+    const stats: SyncStats = {
+      searchResults: 0,
+      filteredUrls: 0,
+      scrapedUrls: 0,
+      gigsExtracted: 0,
+      gigsCreated: 0,
+      gigsSkipped: 0,
+      errors: 0,
+    };
 
     try {
-      logger.info('Starting sync workflow...');
-
-      const result: SyncResult = {
-        status: 'in_progress',
-        summary: {
-          gigsFound: 0,
-          gigsCreated: 0,
-          gigsDuplicate: 0,
-          gigsSkipped: 0,
-          venuesCreated: 0,
-          errors: [],
-        },
-      };
-
-      // Venue cache for this sync run (avoid duplicate API calls)
-      const venueCache = new Map<string, number>();
-
-      // Step 1: Search and extract gig data
-      logger.info('Step 1: Searching and extracting gig data...');
-      const extractedGigs = await searchPort.searchAndExtractGigs();
-      result.summary.gigsFound = extractedGigs.length;
-
-      if (extractedGigs.length === 0) {
-        logger.warn('No gigs found');
-        result.status = 'completed';
-        result.executionTime = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
-        return result;
+      // Clear existing gigs if requested
+      if (options.clearExisting) {
+        logger.info('=== CLEARING EXISTING GIGS ===');
+        const deletedCount = await this.gigs.deleteAllGigs();
+        logger.info({ deletedCount }, 'Cleared existing gigs');
       }
 
-      // Step 2: Process venues and create gigs
-      logger.info('Step 2: Processing venues and creating gigs...');
-      for (const extractedGig of extractedGigs) {
-        try {
-          await processGig(extractedGig, result, venueCache);
-        } catch (error) {
-          const errorMsg = `Failed to process gig "${extractedGig.title}": ${error instanceof Error ? error.message : 'Unknown error'}`;
-          logger.error({ error, gig: extractedGig }, errorMsg);
-          result.summary.errors.push(errorMsg);
-          result.summary.gigsSkipped++;
+      // PASS 1: Discovery
+      logger.info('=== PASS 1: Discovery ===');
+
+      // Step 1: Search with Brave using multiple focused queries
+      const queries: { query: string; options: SearchOptions }[] = [
+        {
+          query: 'συναυλίες Αθήνα 2026',
+          options: { country: 'GR', searchLang: 'el', extraSnippets: true },
+        },
+        {
+          query: 'rock metal alternative concerts Athens Greece 2026',
+          options: { country: 'GR', extraSnippets: true },
+        },
+        {
+          query: 'live music Athens venues upcoming shows 2026',
+          options: { country: 'GR', extraSnippets: true },
+        },
+      ];
+
+      const allResults: SearchResult[] = [];
+      for (let i = 0; i < queries.length; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, 1100));
+        const { query, options } = queries[i];
+        const results = await this.search.search(query, 20, options);
+        allResults.push(...results);
+      }
+
+      // Deduplicate by URL
+      const seen = new Set<string>();
+      const searchResults = allResults.filter((r) => {
+        if (seen.has(r.url)) return false;
+        seen.add(r.url);
+        return true;
+      });
+
+      stats.searchResults = searchResults.length;
+      logger.info(
+        {
+          count: searchResults.length,
+          urls: searchResults.map(r => r.url)
+        },
+        'Found search results (merged and deduplicated)'
+      );
+
+      if (searchResults.length === 0) {
+        logger.warn('No search results found, aborting sync');
+        return stats;
+      }
+
+      // Step 2: Filter promising URLs with Gemini
+      const promisingUrls = await this.llm.filterPromisingUrls(searchResults);
+      const hardcodedUrls = [
+        'https://www.more.com/music/concerts/',
+        'https://www.more.com/gr-el/tickets/music/',
+      ];
+      for (const url of hardcodedUrls) {
+        if (!promisingUrls.includes(url)) {
+          promisingUrls.push(url);
+        }
+      }
+      stats.filteredUrls = promisingUrls.length;
+      logger.info(
+        {
+          count: promisingUrls.length,
+          urls: promisingUrls
+        },
+        'Filtered to promising URLs'
+      );
+
+      if (promisingUrls.length === 0) {
+        logger.warn('No promising URLs found, aborting sync');
+        return stats;
+      }
+
+      // PASS 2: Link Extraction (NEW)
+      logger.info('=== PASS 2: Link Extraction ===');
+
+      const scrapedListingPages = await this.scraper.scrapeMany(promisingUrls);
+      const successfulScrapes = scrapedListingPages.filter((sc) => sc.success);
+      logger.info({ count: successfulScrapes.length }, 'Successfully scraped listing pages');
+
+      // Collect all event detail URLs
+      const allEventDetailUrls: string[] = [];
+
+      for (const scrapedPage of successfulScrapes) {
+        if (scrapedPage.links && scrapedPage.links.length > 0) {
+          // Page has links - likely a listing page
+          logger.info(
+            {
+              url: scrapedPage.url,
+              linkCount: scrapedPage.links.length,
+            },
+            'Found links on page, filtering for event details'
+          );
+
+          const eventUrls = await this.llm.filterEventDetailUrls(scrapedPage.links, {
+            url: scrapedPage.url,
+          });
+
+          allEventDetailUrls.push(...eventUrls);
+          logger.info(
+            {
+              url: scrapedPage.url,
+              foundEventUrls: eventUrls.length,
+            },
+            'Extracted event detail URLs'
+          );
+        } else {
+          // No links found - might already be a detail page
+          logger.info(
+            {
+              url: scrapedPage.url,
+            },
+            'No links found, treating as potential detail page'
+          );
+
+          allEventDetailUrls.push(scrapedPage.url);
         }
       }
 
-      result.status = 'completed';
-      result.executionTime = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
+      // Deduplicate URLs
+      const uniqueEventUrls = [...new Set(allEventDetailUrls)];
+      logger.info({ count: uniqueEventUrls.length }, 'Total unique event detail URLs');
 
-      logger.info({ result }, 'Sync completed successfully');
-      return result;
+      if (uniqueEventUrls.length === 0) {
+        logger.warn('No event detail URLs found, aborting sync');
+        return stats;
+      }
+
+      // Shuffle URLs to get diversity from all sources (not just first source)
+      const shuffledUrls = uniqueEventUrls.sort(() => Math.random() - 0.5);
+
+      // Limit to first 100 URLs (increased from 20 for more gigs)
+      const MAX_DETAIL_PAGES = 100;
+      const limitedEventUrls = shuffledUrls.slice(0, MAX_DETAIL_PAGES);
+      if (limitedEventUrls.length < uniqueEventUrls.length) {
+        logger.info(
+          { original: uniqueEventUrls.length, limited: limitedEventUrls.length },
+          'Limited detail pages to process'
+        );
+      }
+
+      // PASS 3: Detail Extraction
+      logger.info('=== PASS 3: Detail Extraction ===');
+
+      const scrapedDetailPages = await this.scraper.scrapeMany(limitedEventUrls);
+      const successfulDetails = scrapedDetailPages.filter((sc) => sc.success);
+      stats.scrapedUrls = successfulDetails.length;
+      logger.info({ count: successfulDetails.length }, 'Successfully scraped detail pages');
+
+      // Extract gigs from detail pages
+      let allGigs: Gig[] = [];
+      try {
+        allGigs = await this.llm.extractGigsFromMultiplePages(successfulDetails);
+      } catch (error) {
+        logger.error({ error }, 'Failed to extract gigs from batch');
+        stats.errors++;
+      }
+
+      stats.gigsExtracted = allGigs.length;
+      logger.info({ count: allGigs.length }, 'Extracted total gigs');
+
+      if (allGigs.length === 0) {
+        logger.warn('No gigs extracted, sync complete');
+        return stats;
+      }
+
+      // Step 5: Store gigs in Strapi (with deduplication)
+      for (const gig of allGigs) {
+        try {
+          // Check if gig already exists
+          const existingGigId = await this.gigs.findGig(gig.title, gig.date);
+          if (existingGigId) {
+            logger.info({ title: gig.title, date: gig.date }, 'Skipping duplicate gig');
+            stats.gigsSkipped++;
+            continue;
+          }
+
+          // Get or create venue
+          const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
+
+          // Create gig
+          await this.gigs.createGig(gig, venueId);
+          stats.gigsCreated++;
+        } catch (error) {
+          logger.error({ gig: gig.title, error }, 'Failed to store gig');
+          stats.errors++;
+        }
+      }
+
+      logger.info('=== Sync Complete ===');
+      logger.info(
+        {
+          searchResults: stats.searchResults,
+          filteredUrls: stats.filteredUrls,
+          scrapedUrls: stats.scrapedUrls,
+          gigsExtracted: stats.gigsExtracted,
+          gigsCreated: stats.gigsCreated,
+          gigsSkipped: stats.gigsSkipped,
+          errors: stats.errors,
+        },
+        'Sync statistics'
+      );
+
+      return stats;
     } catch (error) {
-      logger.error({ error }, 'Sync failed');
+      logger.error({ error }, 'Fatal error during sync');
+      stats.errors++;
       throw error;
     }
   }
-
-  /**
-   * Process a single extracted gig: match/create venue, check for duplicates, create gig
-   */
-  async function processGig(
-    extractedGig: Gig,
-    result: SyncResult,
-    venueCache: Map<string, number>
-  ): Promise<void> {
-    // Step 1: Get or create venue
-    const venueId = await getOrCreateVenue(extractedGig.venue, result, venueCache);
-
-    // Step 2: Check if gig already exists (deduplication)
-    const exists = await gigsPort.gigExists(extractedGig.title, extractedGig.date);
-    if (exists) {
-      logger.info({ title: extractedGig.title, date: extractedGig.date }, 'Gig already exists, skipping');
-      result.summary.gigsDuplicate++;
-      return;
-    }
-
-    // Step 3: Create the gig
-    const gig: StrapiGig = {
-      title: extractedGig.title,
-      date: extractedGig.date,
-      time_display: extractedGig.time_display,
-      price: extractedGig.price,
-      description: extractedGig.description,
-      venue: venueId,
-    };
-
-    await gigsPort.createGig(gig);
-    result.summary.gigsCreated++;
-  }
-
-  /**
-   * Get existing venue by name or create a new one
-   * Uses cache to avoid duplicate API calls during a single sync run
-   */
-  async function getOrCreateVenue(
-    venueData: { name: string; address?: string; website?: string; neighborhood?: string },
-    result: SyncResult,
-    venueCache: Map<string, number>
-  ): Promise<number> {
-    const venueName = venueData.name;
-
-    // Check cache first
-    if (venueCache.has(venueName.toLowerCase())) {
-      const cachedId = venueCache.get(venueName.toLowerCase())!;
-      logger.debug({ venueName, venueId: cachedId }, 'Using cached venue');
-      return cachedId;
-    }
-
-    // Search for existing venue in Strapi
-    const existingVenue = await gigsPort.getVenueByName(venueName);
-
-    if (existingVenue) {
-      // Venue exists, cache and return ID
-      venueCache.set(venueName.toLowerCase(), existingVenue.id);
-      logger.info({ venueName, venueId: existingVenue.id }, 'Found existing venue');
-      return existingVenue.id;
-    }
-
-    // Venue doesn't exist, create it
-    logger.info({ venueName }, 'Creating new venue');
-    const newVenue: StrapiVenue = {
-      name: venueData.name,
-      address: venueData.address,
-      website: venueData.website,
-      neighborhood: venueData.neighborhood,
-    };
-
-    const createdVenue = await gigsPort.createVenue(newVenue);
-    venueCache.set(venueName.toLowerCase(), createdVenue.id);
-    result.summary.venuesCreated++;
-
-    return createdVenue.id;
-  }
-
-  return {
-    execute,
-  };
 }

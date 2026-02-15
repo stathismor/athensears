@@ -1,30 +1,41 @@
-import { z } from 'zod';
-import { venueSchema } from './venue.js';
+import { z } from "zod";
 
-/**
- * Extracted gig data schema (from AI before venue ID resolution)
- */
-export const gigSchema = z
-  .object({
-    title: z.string().min(1).max(255),
-    date: z.string().datetime(),
-    time_display: z.string().max(20).optional().default('21:00'),
-    price: z.string().max(50).optional(),
+export const GigSchema = z.object({
+  title: z.string(),
+  date: z.date(),
+  venueName: z.string(),
+  description: z.string().optional(),
+  price: z.string().optional(),
+  url: z.string().optional(),
+  imageUrl: z.string().optional(),
+});
+
+export type Gig = z.infer<typeof GigSchema>;
+
+export const StrapiGigSchema = z.object({
+  data: z.object({
+    title: z.string(),
+    date: z.string(), // ISO string for Strapi
+    venue: z.number(), // venue ID
     description: z.string().optional(),
-    venue: venueSchema,
-  })
-  .refine(
-    (data) => {
-      // Validate date is in future
-      const gigDate = new Date(data.date);
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      return gigDate >= now;
-    },
-    {
-      message: 'Date must be in the future',
-      path: ['date'],
-    }
-  );
+    price: z.string().optional(),
+    url: z.string().optional(),
+    // imageUrl removed - Strapi schema doesn't support it
+  }),
+});
 
-export type Gig = z.infer<typeof gigSchema>;
+export type StrapiGig = z.infer<typeof StrapiGigSchema>;
+
+export function toStrapiGig(gig: Gig, venueId: number): StrapiGig {
+  return {
+    data: {
+      title: gig.title,
+      date: gig.date.toISOString(),
+      venue: venueId,
+      description: gig.description,
+      price: gig.price,
+      url: gig.url,
+      // imageUrl intentionally excluded - Strapi schema doesn't support it
+    },
+  };
+}

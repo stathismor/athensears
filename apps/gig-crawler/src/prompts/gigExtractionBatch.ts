@@ -28,12 +28,13 @@ Extract all upcoming music events from ALL the pages below that match the genre 
   - A price range: "€20-€30"
   - "Free" if the event is free
   - "N/A" if price is not mentioned or unknown
+- **ticket_url** (optional): Direct link to ticket purchase or event detail page (e.g. more.com, viva.gr)
 - **image_url** (optional): URL of event poster or image
 
 - **url** (required): The Source URL of the page where this event was found (from the "Source URL:" field above each page)
 
 **Important Guidelines:**
-1. Only extract events that are clearly in Athens, Greece
+1. ONLY extract events in Athens, Greece. SKIP events in Thessaloniki, Patras, or any other city. If the venue or location mentions a city other than Athens, skip it
 2. Only extract future events (skip past events)
 3. If the date is ambiguous or missing, skip that event
 4. Use the venue name from the content, not generic descriptions
@@ -41,11 +42,13 @@ Extract all upcoming music events from ALL the pages below that match the genre 
    - "Wildfire @ KYTTARO" → "Wildfire"
    - "Band Name at Venue" → "Band Name"
 6. **Price format:** Look for ticket prices in the content. Common indicators: "€", "EUR", "euro", "price", "admission", "tickets", "entrance fee". If no price is found, use "N/A"
-7. **URL field:** For each event, set "url" to the "Source URL" shown at the top of the page where you found the event
-8. Extract events from ALL pages provided
-9. If a page has no events, skip it and move to the next
-10. Return all events from all pages in a single array
-11. **Avoid duplicates:** If the same artist/event appears multiple times with the same date, only extract it once
+7. **Ticket links:** Look for ticket purchase links in the content (e.g. more.com, viva.gr, ticketmaster) and include them as ticket_url
+8. **URL field:** For each event, set "url" to the "Source URL" shown at the top of the page where you found the event
+9. Extract events from ALL pages provided
+10. If a page has no events, skip it and move to the next
+11. Return all events from all pages in a single array
+12. **Avoid duplicates:** If the same artist/event appears multiple times with the same date, only extract it once
+13. **Multi-band/festival events:** If a page describes a single event (e.g. a festival day, a multi-band concert) with multiple bands performing, extract it as ONE event. Use the event/festival name as the title, and list the performing bands in the description. Do NOT create a separate event for each band
 
 **Pages to Extract From:**
 

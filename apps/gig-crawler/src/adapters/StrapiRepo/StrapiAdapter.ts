@@ -30,9 +30,10 @@ export class StrapiAdapter implements GigsPort {
   async findVenueByName(
     name: string
   ): Promise<{ id: number; venue: Venue } | null> {
-    // Check cache first
-    if (this.venueCache.has(name)) {
-      const id = this.venueCache.get(name)!;
+    // Check cache first (case-insensitive)
+    const cacheKey = name.toLowerCase();
+    if (this.venueCache.has(cacheKey)) {
+      const id = this.venueCache.get(cacheKey)!;
       logger.debug({ name, id }, "Venue found in cache");
       return { id, venue: { name } };
     }
@@ -41,7 +42,7 @@ export class StrapiAdapter implements GigsPort {
       async () => {
         const response = await this.client.get("/api/venues", {
           params: {
-            "filters[name][$eq]": name,
+            "filters[name][$eqi]": name,
           },
         });
 
@@ -55,8 +56,8 @@ export class StrapiAdapter implements GigsPort {
             website: entity.website ?? undefined,
           };
 
-          // Cache the result
-          this.venueCache.set(name, entity.id);
+          // Cache the result (case-insensitive key)
+          this.venueCache.set(cacheKey, entity.id);
           logger.info({ name, id: entity.id }, "Found venue");
           return { id: entity.id, venue };
         }
@@ -82,8 +83,8 @@ export class StrapiAdapter implements GigsPort {
 
         if (parsed.data && !Array.isArray(parsed.data)) {
           const id = parsed.data.id;
-          // Cache the new venue
-          this.venueCache.set(venue.name, id);
+          // Cache the new venue (case-insensitive key)
+          this.venueCache.set(venue.name.toLowerCase(), id);
           logger.info({ name: venue.name, id }, "Created venue");
           return id;
         }
@@ -109,9 +110,9 @@ export class StrapiAdapter implements GigsPort {
 
         const response = await this.client.get("/api/gigs", {
           params: {
-            "filters[title][$eq]": title,
-            "filters[date][$gte]": dateStr,
-            "filters[date][$lte]": dateStr,
+            "filters[title][$eqi]": title,
+            "filters[date][$gte]": `${dateStr}T00:00:00.000Z`,
+            "filters[date][$lte]": `${dateStr}T23:59:59.999Z`,
           },
         });
 

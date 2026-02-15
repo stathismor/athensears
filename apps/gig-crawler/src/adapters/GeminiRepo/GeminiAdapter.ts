@@ -12,6 +12,17 @@ import { GIG_EXTRACTION_BATCH_PROMPT } from "../../prompts/gigExtractionBatch.js
 import { EVENT_LINK_FILTER_PROMPT } from "../../prompts/eventLinkFilter.js";
 import { env } from "../../models/env.js";
 
+function normalizePrice(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "N/A" || trimmed === "€" || trimmed === "EUR") return undefined;
+  if (/sold\s*out/i.test(trimmed)) return "Sold Out";
+  // Convert price ranges like "€86.25-€178.25" → "from €86.25"
+  const rangeMatch = trimmed.match(/^(€[\d.,]+)\s*[-–—]\s*€[\d.,]+$/);
+  if (rangeMatch) return `from ${rangeMatch[1]}`;
+  return trimmed;
+}
+
 export class GeminiAdapter implements LLMPort {
   private readonly genAI: GoogleGenerativeAI;
   private readonly model: string;
@@ -122,8 +133,8 @@ export class GeminiAdapter implements LLMPort {
                 date,
                 venueName: gigData.venue_name || "Unknown Venue",
                 description: gigData.description,
-                price: gigData.price,
-                url: scrapedContent.url,
+                price: normalizePrice(gigData.price),
+                url: gigData.ticket_url || scrapedContent.url,
                 imageUrl: gigData.image_url,
               });
             } catch (error) {
@@ -304,8 +315,8 @@ export class GeminiAdapter implements LLMPort {
                 date,
                 venueName: gigData.venue_name || "Unknown Venue",
                 description: gigData.description,
-                price: gigData.price,
-                url: gigData.url || "", // LLM should provide source page URL
+                price: normalizePrice(gigData.price),
+                url: gigData.ticket_url || gigData.url || "",
                 imageUrl: gigData.image_url,
               });
             } catch (error) {

@@ -2,11 +2,11 @@
   "name": "gig-crawler",
   "version": "1.0.0",
   "private": true,
-  "description": "Automated gig crawler service for Athens Ears",
+  "description": "Two-pass Athens gig crawler with Gemini LLM",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "dev": "NODE_OPTIONS='--env-file=.env' tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "dev:docker": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node --env-file=.env dist/index.js",
@@ -18,20 +18,27 @@
     "crawler",
     "gigs",
     "athens",
-    "music"
+    "music",
+    "gemini",
+    "two-pass"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@mozilla/readability": "^0.5.0",
     "axios": "^1.7.9",
     "express": "^4.21.2",
+    "jsdom": "^25.0.1",
     "node-cron": "^3.0.3",
+    "playwright": "1.52.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.5",
     "@types/node-cron": "^3.0.11",
     "tsx": "^4.19.2",

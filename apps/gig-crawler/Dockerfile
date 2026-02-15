@@ -1,48 +1,41 @@
 # Build stage
-FROM node:24-alpine AS builder
-
-# Install pnpm
-RUN npm install -g pnpm@10.11.0
-
-WORKDIR /app
-
-# Copy workspace files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/gig-crawler/package.json ./apps/gig-crawler/
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Copy source code
-COPY apps/gig-crawler ./apps/gig-crawler
-
-# Build the application
-WORKDIR /app/apps/gig-crawler
-RUN pnpm build
-
-# Production stage
-FROM node:24-alpine
-
-# Install pnpm
-RUN npm install -g pnpm@10.11.0
+FROM mcr.microsoft.com/playwright:v1.52.0-noble AS builder
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/gig-crawler/package.json ./apps/gig-crawler/
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source
+COPY src ./src
+
+# Build
+RUN npm run build
+
+# Production stage
+FROM mcr.microsoft.com/playwright:v1.52.0-noble
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
 
 # Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+RUN npm ci --omit=dev
 
-# Copy built application from builder
-COPY --from=builder /app/apps/gig-crawler/dist ./apps/gig-crawler/dist
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist
 
-# Set working directory to the app
-WORKDIR /app/apps/gig-crawler
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:${PORT:-3000}/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
-# Expose port (Railway will set PORT env var)
+# Expose port
 EXPOSE 3000
 
-# Start the application
-CMD ["pnpm", "start:docker"]
+# Run
+CMD ["node", "dist/index.js"]

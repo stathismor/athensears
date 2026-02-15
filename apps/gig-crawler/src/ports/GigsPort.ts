@@ -1,18 +1,34 @@
-import type { StrapiEntity } from '../types/index.js';
-import type { StrapiGig } from '../models/strapiGig.js';
-import type { StrapiVenue } from '../models/strapiVenue.js';
+import type { Gig } from "../models/gig.js";
+import type { Venue } from "../models/venue.js";
 
-/**
- * Port for gig and venue repository operations
- */
 export interface GigsPort {
-  // Venue operations
-  getVenues(): Promise<StrapiEntity<StrapiVenue>[]>;
-  getVenueByName(name: string): Promise<StrapiEntity<StrapiVenue> | null>;
-  createVenue(venue: StrapiVenue): Promise<StrapiEntity<StrapiVenue>>;
+  /**
+   * Find venue by name
+   */
+  findVenueByName(name: string): Promise<{ id: number; venue: Venue } | null>;
 
-  // Gig operations
-  getGigs(): Promise<StrapiEntity<StrapiGig>[]>;
-  gigExists(title: string, date: string): Promise<boolean>;
-  createGig(gig: StrapiGig): Promise<StrapiEntity<StrapiGig>>;
+  /**
+   * Create a new venue
+   */
+  createVenue(venue: Venue): Promise<number>;
+
+  /**
+   * Check if gig already exists
+   */
+  findGig(title: string, date: Date): Promise<number | null>;
+
+  /**
+   * Create a new gig
+   */
+  createGig(gig: Gig, venueId: number): Promise<number>;
+
+  /**
+   * Get existing venue ID or create new venue
+   */
+  getOrCreateVenue(venueName: string): Promise<number>;
+
+  /**
+   * Delete all gigs
+   */
+  deleteAllGigs(): Promise<number>;
 }

@@ -1,13 +1,29 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-/**
- * Venue schema
- */
-export const venueSchema = z.object({
-  name: z.string().min(1).max(255),
+export const VenueSchema = z.object({
+  name: z.string(),
   address: z.string().optional(),
-  website: z.string().url().max(500).optional().or(z.literal('')),
-  neighborhood: z.string().max(100).optional(),
+  website: z.string().optional(),
 });
 
-export type Venue = z.infer<typeof venueSchema>;
+export type Venue = z.infer<typeof VenueSchema>;
+
+export const StrapiVenueSchema = z.object({
+  data: z.object({
+    name: z.string(),
+    address: z.string().optional(),
+    website: z.string().optional(),
+  }),
+});
+
+export type StrapiVenue = z.infer<typeof StrapiVenueSchema>;
+
+export function toStrapiVenue(venue: Venue): StrapiVenue {
+  return {
+    data: {
+      name: venue.name,
+      address: venue.address,
+      website: venue.website,
+    },
+  };
+}

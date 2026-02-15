@@ -35,11 +35,12 @@ Extract all upcoming music events from this content that match the genre criteri
   - A price range: "€20-€30"
   - "Free" if the event is free
   - "N/A" if price is not mentioned or unknown
+- **ticket_url** (optional): Direct link to ticket purchase or event detail page (e.g. more.com, viva.gr)
 - **url** (required): Use the Source URL provided above
 - **image_url** (optional): URL of event poster or image
 
 **Important Guidelines:**
-1. Only extract events that are clearly in Athens, Greece
+1. ONLY extract events in Athens, Greece. SKIP events in Thessaloniki, Patras, or any other city. If the venue or location mentions a city other than Athens, skip it
 2. Only extract future events (skip past events)
 3. If the date is ambiguous or missing, skip that event
 4. Use the venue name from the content, not generic descriptions
@@ -48,9 +49,11 @@ Extract all upcoming music events from this content that match the genre criteri
    - "Giorgos Magos @ Το Μεζεκλίκι" → "Giorgos Magos"
    - "Band Name at Venue" → "Band Name"
 6. **Price format:** Look for ticket prices in the content. Common indicators: "€", "EUR", "euro", "price", "admission", "tickets", "entrance fee". If no price is found, use "N/A"
-7. If multiple events are listed, extract all of them
-8. If no events are found, return an empty array
-9. **Avoid duplicates:** If the same artist/event appears multiple times with the same date, only extract it once
+7. **Ticket links:** Look for ticket purchase links in the content (e.g. more.com, viva.gr, ticketmaster) and include them as ticket_url
+8. If multiple events are listed, extract all of them
+9. If no events are found, return an empty array
+10. **Avoid duplicates:** If the same artist/event appears multiple times with the same date, only extract it once
+11. **Multi-band/festival events:** If a page describes a single event (e.g. a festival day, a multi-band concert) with multiple bands performing, extract it as ONE event. Use the event/festival name as the title, and list the performing bands in the description. Do NOT create a separate event for each band
 
 **Output Format:**
 Return your response as a JSON object with this exact structure:

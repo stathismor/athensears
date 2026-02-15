@@ -1,12 +1,11 @@
-import type { Gig } from '../models/gig.js';
+import type { SearchResult } from "../models/searchResult.js";
 
-/**
- * Port for searching and extracting gig data from external sources
- */
+export interface SearchOptions {
+  country?: string;
+  searchLang?: string;
+  extraSnippets?: boolean;
+}
+
 export interface SearchPort {
-  /**
-   * Search for Athens music events and extract structured gig data
-   * @returns Array of gigs with venue information
-   */
-  searchAndExtractGigs(): Promise<Gig[]>;
+  search(query: string, count?: number, options?: SearchOptions): Promise<SearchResult[]>;
 }

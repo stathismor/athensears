@@ -1,154 +1,119 @@
-# Gig Crawler Service
+# Gig Crawler 2
 
-Automated service that uses AI to find Athens music events on the web and populates the Strapi CMS.
-
-## Features
-
-- Nightly automated discovery of Athens live music events
-- Manual trigger via API endpoint
-- AI-powered web search + data extraction (single API call)
-- Venue matching and creation
-- Duplicate detection
-- Structured logging
+TypeScript-based service for discovering and extracting Athens music event data using a two-pass approach.
 
 ## Architecture
 
-```
-Gig Crawler Service
-├── Brave AI Grounding API (search + extraction in one call)
-│   └── Searches web for Athens events AND extracts structured data
-└── Strapi CMS API
-    └── Creates/updates gigs and venues
-```
+Two-pass workflow:
+1. **Pass 1 - Discovery**: Brave Web Search → Gemini filters URLs
+2. **Pass 2 - Extraction**: Readability scrapes → Gemini extracts JSON
+
+## Key Differences from gig-crawler
+
+- **Approach**: Two-pass (search → filter → scrape → extract) vs one-pass (AI search)
+- **LLM**: Google Gemini for filtering and extraction
+- **Scraping**: Readability + JSDOM instead of Brave AI
+- **Same**: Hexagonal architecture, Express server, node-cron scheduling
 
 ## Setup
 
 ### Prerequisites
 
-- Node.js >= 24.0.0
-- pnpm (for monorepo)
-- Brave AI Grounding API key (free tier: 2,000-5,000 queries/month)
-- Access to Strapi CMS API
+- Node.js 24+
+- Strapi CMS instance (shared with gig-crawler)
+- Brave Web Search API key
+- Google Gemini API key
 
-### Installation
-
-From the monorepo root:
+### Local Development
 
 ```bash
-pnpm install
-```
+# Install dependencies
+npm install
 
-### Environment Variables
-
-Copy `.env.example` to `.env` and fill in your API keys:
-
-```bash
+# Copy environment template
 cp .env.example .env
+
+# Edit .env with your API keys
+nano .env
+
+# Run development server
+npm run dev
 ```
 
-Required variables:
-- `STRAPI_API_URL`: URL of your Strapi CMS (e.g., Railway deployment URL)
-- `STRAPI_API_TOKEN`: API token with write permissions for gigs and venues
-- `BRAVE_API_KEY`: Your Brave AI Grounding API key
-
-### Getting API Keys
-
-**Brave AI Grounding API**:
-1. Sign up at https://api.search.brave.com/app/dashboard
-2. Get your API key from the dashboard
-3. Free tier: 2,000-5,000 queries/month (search + AI extraction combined)
-4. Note: Requires credit card for verification (no charge on free tier)
-
-**Strapi API Token**:
-1. Log into your Strapi admin panel
-2. Go to Settings > API Tokens
-3. Create new token with permissions:
-   - `api::gig.gig.create`
-   - `api::gig.gig.find`
-   - `api::venue.venue.create`
-   - `api::venue.venue.find`
-
-## Development
-
-Run in development mode with hot reload:
+### Docker Development
 
 ```bash
-pnpm --filter gig-crawler dev
-```
+# Build
+docker build -t gig-crawler-2 .
 
-## Production
-
-Build and run:
-
-```bash
-pnpm --filter gig-crawler build
-pnpm --filter gig-crawler start
+# Run
+docker run -p 3001:3001 --env-file .env gig-crawler-2
 ```
 
 ## API Endpoints
 
-### Manual Sync Trigger
+- `GET /health` - Health check
+- `POST /api/sync` - Trigger manual sync
+- `GET /` - Service info
 
-Trigger a manual crawl and sync:
+## Scheduled Sync
 
-```bash
-POST http://localhost:3000/api/sync
-```
+Runs automatically at 2 AM Athens time (same as gig-crawler).
 
-Response:
-```json
-{
-  "status": "completed",
-  "summary": {
-    "gigsFound": 15,
-    "gigsCreated": 12,
-    "gigsDuplicate": 3,
-    "venuesCreated": 2,
-    "errors": []
-  },
-  "executionTime": "45.3s"
-}
-```
+Configure via environment variables:
+- `CRON_SCHEDULE=0 2 * * *`
+- `TZ=Europe/Athens`
 
-### Health Check
+## Environment Variables
 
-Check service health:
-
-```bash
-GET http://localhost:3000/health
-```
+See `.env.example` for all available configuration options.
 
 ## Deployment
 
-This service is designed to be deployed on Railway alongside the CMS.
+### Railway
 
-See `railway.json` for deployment configuration.
+1. Create new Railway service
+2. Link to GitHub repo
+3. Set root directory: `apps/gig-crawler-2`
+4. Add environment variables from `.env.example`
+5. Deploy
 
-## Cron Schedule
+The service will use the `railway.json` configuration.
 
-By default, the crawler runs nightly at 2 AM Athens time (Europe/Athens timezone).
+## Testing
 
-Customize by setting `CRON_SCHEDULE` environment variable:
-- `0 2 * * *` - Every day at 2 AM (default)
-- `0 */6 * * *` - Every 6 hours
-- `0 0 * * 0` - Every Sunday at midnight
+```bash
+# Manual sync via API
+curl -X POST http://localhost:3001/api/sync
 
-## Logging
+# Check health
+curl http://localhost:3001/health
+```
 
-Logs are output in JSON format using Pino logger.
+## Logs
 
-Log levels: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+The service logs detailed information using Pino:
+- Number of search results found
+- Number of URLs filtered by Gemini
+- Number of URLs successfully scraped
+- Number of gigs extracted
+- Number of gigs created vs duplicates
+- Any errors or failures
 
-Set `LOG_LEVEL` environment variable to control verbosity.
+## Cost Estimate
 
-## Cost Estimation
+With `gemini-1.5-flash`:
+- ~$0.02 per sync
+- ~$0.60/month (30 syncs)
 
-With nightly crawling (30 days/month):
-- Brave AI Grounding API: ~30 queries/month (well within 2,000-5,000 free tier limit)
-- Each query performs: web search + AI extraction + structured output
+## Scripts
 
-**Total monthly cost: $0**
+- `npm run dev` - Development server with hot reload
+- `npm run build` - Build TypeScript to JavaScript
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run format` - Format with Prettier
 
 ## License
 
-ISC
+MIT

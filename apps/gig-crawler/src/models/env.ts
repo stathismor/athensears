@@ -1,17 +1,32 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-/**
- * Environment configuration schema
- */
-export const envSchema = z.object({
-  STRAPI_API_URL: z.string().url().min(1, 'STRAPI_API_URL is required'),
-  STRAPI_API_TOKEN: z.string().min(1, 'STRAPI_API_TOKEN is required'),
-  BRAVE_API_KEY: z.string().min(1, 'BRAVE_API_KEY is required'),
-  PORT: z.string().optional().default('3000'),
-  NODE_ENV: z.enum(['development', 'production', 'test']).optional().default('development'),
-  CRON_SCHEDULE: z.string().optional().default('0 2 * * *'),
-  TZ: z.string().optional().default('Europe/Athens'),
-  LOG_LEVEL: z.string().optional().default('info'),
+export const EnvSchema = z.object({
+  // Strapi CMS
+  STRAPI_API_URL: z.string().default("http://localhost:1337"),
+  STRAPI_API_TOKEN: z.string(),
+
+  // Brave Web Search API
+  BRAVE_API_KEY: z.string(),
+
+  // Google Gemini API
+  GEMINI_API_KEY: z.string(),
+  GEMINI_MODEL: z.string().default("gemini-1.5-flash-latest"),
+
+  // Server
+  PORT: z.string().default("3000"),
+  NODE_ENV: z.string().default("development"),
+
+  // Cron
+  CRON_SCHEDULE: z.string().default("0 2 * * *"),
+  TZ: z.string().default("Europe/Athens"),
+
+  // Scraper
+  SCRAPER_CONCURRENCY: z.string().default("5"),
+
+  // Logging
+  LOG_LEVEL: z.string().default("info"),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = z.infer<typeof EnvSchema>;
+
+export const env = EnvSchema.parse(process.env);

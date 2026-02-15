@@ -3,23 +3,16 @@ node_modules/
 
 # Build output
 dist/
-build/
 
-# Environment variables
+# Environment
 .env
 .env.local
-.env.production
 
 # Logs
-logs/
 *.log
-npm-debug.log*
-pnpm-debug.log*
+logs/
 
-# TypeScript
-*.tsbuildinfo
-
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
@@ -29,3 +22,9 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Testing
+coverage/
+
+# Misc
+.turbo/
