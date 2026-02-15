@@ -59,6 +59,13 @@ app.get("/health", (req, res) => {
 
 // Manual sync endpoint (non-blocking)
 app.post("/api/sync", (req, res) => {
+  if (env.SYNC_API_KEY) {
+    const auth = req.headers.authorization;
+    if (auth !== `Bearer ${env.SYNC_API_KEY}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+  }
+
   // Default to clearing existing data (use ?clear=false to keep old data)
   const clearExisting = req.query.clear !== "false";
 

@@ -23,6 +23,9 @@ export const EnvSchema = z.object({
   // Scraper
   SCRAPER_CONCURRENCY: z.string().default("5"),
 
+  // Auth
+  SYNC_API_KEY: z.string().optional(),
+
   // Logging
   LOG_LEVEL: z.string().default("info"),
 });
