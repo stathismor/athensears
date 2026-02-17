@@ -136,14 +136,14 @@ const gigsByMonth = groupByMonth(gigs);
                               <span class="text-dim_grey-500 text-sm">
                                 {weekday} {day}
                               </span>
-                              {gig.price && gig.url ? (
+                              {gig.url ? (
                                 <a
                                   href={gig.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   class="text-orange-500 text-sm hover:text-orange-600 underline"
                                 >
-                                  {gig.price}
+                                  {gig.price || 'Info'}
                                 </a>
                               ) : gig.price ? (
                                 <span class="text-orange-500 text-sm">{gig.price}</span>
@@ -191,14 +191,14 @@ const gigsByMonth = groupByMonth(gigs);
                               ) : null}
                             </div>
                             <div class="w-20 shrink-0 text-right text-sm text-orange-500">
-                              {gig.url && gig.price ? (
+                              {gig.url ? (
                                 <a
                                   href={gig.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   class="hover:text-orange-600 underline"
                                 >
-                                  {gig.price}
+                                  {gig.price || 'Info'}
                                 </a>
                               ) : (
                                 <span>{gig.price || '—'}</span>
