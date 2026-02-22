@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/playwright:v1.52.0-noble
+RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/gig-crawler/package.json ./apps/gig-crawler/
+RUN pnpm install --frozen-lockfile --filter gig-crawler
+COPY apps/gig-crawler ./apps/gig-crawler
+WORKDIR /app/apps/gig-crawler
+EXPOSE 3000
+CMD ["pnpm", "dev:docker"]

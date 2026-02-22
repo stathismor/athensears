@@ -20,7 +20,7 @@ services:
   cms:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: apps/cms/Dockerfile.dev
     container_name: athensears-cms
     restart: unless-stopped
     environment:
@@ -52,8 +52,8 @@ services:
 
   gig-crawler:
     build:
-      context: ./apps/gig-crawler
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/gig-crawler/Dockerfile.dev
     container_name: athensears-gig-crawler
     restart: unless-stopped
     environment:
