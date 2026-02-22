@@ -224,6 +224,7 @@ export class StrapiAdapter implements GigsPort {
     const response = await this.client.get("/api/gigs", {
       params: {
         "pagination[pageSize]": 100,
+        "filters[manual][$ne]": true,
       },
     });
 

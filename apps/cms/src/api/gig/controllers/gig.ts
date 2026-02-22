@@ -3,9 +3,10 @@ import { factories } from '@strapi/strapi';
 export default factories.createCoreController('api::gig.gig', ({ strapi }) => ({
   async deleteAll(ctx) {
     try {
-      // Fetch all gigs (only id for efficiency)
+      // Fetch all non-manual gigs (only id for efficiency)
       const entities = await strapi.entityService.findMany('api::gig.gig', {
-        fields: ['id'],
+        fields: ['id', 'manual'],
+        filters: { manual: { $ne: true } },
         pagination: { limit: -1 }, // No limit
       });
 

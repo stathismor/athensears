@@ -39,6 +39,10 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::venue.venue"
+    },
+    "manual": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

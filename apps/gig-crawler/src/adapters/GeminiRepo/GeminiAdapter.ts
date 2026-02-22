@@ -17,10 +17,39 @@ function normalizePrice(raw: string | undefined): string | undefined {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === "N/A" || trimmed === "€" || trimmed === "EUR") return undefined;
   if (/sold\s*out/i.test(trimmed)) return "Sold Out";
-  // Convert price ranges like "€86.25-€178.25" → "from €86.25"
-  const rangeMatch = trimmed.match(/^(€[\d.,]+)\s*[-–—]\s*€[\d.,]+$/);
-  if (rangeMatch) return `from ${rangeMatch[1]}`;
-  return trimmed;
+  if (/free/i.test(trimmed)) return "Free";
+
+  // Extract all numeric values (handles €16, 18€, 29,50, 27.50, €20-€30, etc.)
+  const numbers: number[] = [];
+  const regex = /(\d+)[.,](\d+)|\d+/g;
+  let match;
+  while ((match = regex.exec(trimmed)) !== null) {
+    if (match[1] !== undefined) {
+      // Has decimal part (e.g. 27.50 or 29,50)
+      numbers.push(parseFloat(`${match[1]}.${match[2]}`));
+    } else {
+      numbers.push(parseInt(match[0], 10));
+    }
+  }
+
+  if (numbers.length === 0) return undefined;
+
+  const min = Math.min(...numbers);
+  const amount = Math.floor(min);
+  if (amount <= 0) return undefined;
+
+  return `€${amount}`;
+}
+
+function normalizeUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  // Looks like a domain (contains a dot, no spaces)
+  if (/^[^\s]+\.[^\s]+/.test(trimmed)) return `https://${trimmed}`;
+  return undefined;
 }
 
 export class GeminiAdapter implements LLMPort {
@@ -134,7 +163,7 @@ export class GeminiAdapter implements LLMPort {
                 venueName: gigData.venue_name || "Unknown Venue",
                 description: gigData.description,
                 price: normalizePrice(gigData.price),
-                url: gigData.ticket_url || scrapedContent.url,
+                url: normalizeUrl(gigData.ticket_url) || scrapedContent.url,
                 imageUrl: gigData.image_url,
               });
             } catch (error) {
@@ -316,7 +345,7 @@ export class GeminiAdapter implements LLMPort {
                 venueName: gigData.venue_name || "Unknown Venue",
                 description: gigData.description,
                 price: normalizePrice(gigData.price),
-                url: gigData.ticket_url || gigData.url || "",
+                url: normalizeUrl(gigData.ticket_url) || normalizeUrl(gigData.url) || "",
                 imageUrl: gigData.image_url,
               });
             } catch (error) {

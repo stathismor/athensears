@@ -54,6 +54,7 @@ Extract all upcoming music events from this content that match the genre criteri
 9. If no events are found, return an empty array
 10. **Avoid duplicates:** If the same artist/event appears multiple times with the same date, only extract it once
 11. **Multi-band/festival events:** If a page describes a single event (e.g. a festival day, a multi-band concert) with multiple bands performing, extract it as ONE event. Use the event/festival name as the title, and list the performing bands in the description. Do NOT create a separate event for each band
+12. **Date accuracy:** When a page lists multiple events, carefully match each event's date to that specific event. Do not mix dates between events. For Songkick pages, the date is shown prominently at the top of each event page — use that date, not dates from sidebar or related events
 
 **Output Format:**
 Return your response as a JSON object with this exact structure:
