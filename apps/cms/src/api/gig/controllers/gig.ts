@@ -4,17 +4,15 @@ export default factories.createCoreController('api::gig.gig', ({ strapi }) => ({
   async deleteAll(ctx) {
     try {
       // Fetch all non-manual gigs (only id for efficiency)
-      const entities = await strapi.entityService.findMany('api::gig.gig', {
-        fields: ['id', 'manual'],
-        filters: { manual: { $ne: true } },
-        pagination: { limit: -1 }, // No limit
+      const entities = await strapi.db.query('api::gig.gig').findMany({
+        select: ['id'],
+        where: { manual: { $ne: true } },
       });
 
-      // Delete all gigs in parallel using id (entity service uses id, not documentId)
-      const deletePromises = entities.map((entity: any) =>
-        strapi.entityService.delete('api::gig.gig', entity.id)
-      );
-      await Promise.all(deletePromises);
+      // Delete all gigs individually
+      for (const entity of entities) {
+        await strapi.db.query('api::gig.gig').delete({ where: { id: entity.id } });
+      }
 
       return ctx.send({
         data: {
