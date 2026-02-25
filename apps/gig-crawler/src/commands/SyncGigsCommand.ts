@@ -1,11 +1,12 @@
-import type { SearchPort } from '../ports/SearchPort.js';
-import type { SearchOptions } from '../ports/SearchPort.js';
-import type { ScraperPort } from '../ports/ScraperPort.js';
-import type { LLMPort } from '../ports/LLMPort.js';
-import type { GigsPort } from '../ports/GigsPort.js';
-import type { Gig } from '../models/gig.js';
-import type { SearchResult } from '../models/searchResult.js';
-import { logger } from '../utils/logger.js';
+import type { SearchPort } from "../ports/SearchPort.js";
+import type { SearchOptions } from "../ports/SearchPort.js";
+import type { ScraperPort } from "../ports/ScraperPort.js";
+import type { LLMPort } from "../ports/LLMPort.js";
+import type { GigsPort } from "../ports/GigsPort.js";
+import type { Gig } from "../models/gig.js";
+import type { SearchResult } from "../models/searchResult.js";
+import { logger } from "../utils/logger.js";
+import { env } from "../models/env.js";
 
 export interface SyncStats {
   searchResults: number;
@@ -25,8 +26,22 @@ export class SyncGigsCommand {
     private readonly gigs: GigsPort
   ) {}
 
-  async execute(options: { clearExisting?: boolean } = {}): Promise<SyncStats> {
-    logger.info('Starting gig sync (three-pass approach with auto-detection)');
+  async execute(
+    options: { clearExisting?: boolean; monthsAhead?: number } = {}
+  ): Promise<SyncStats> {
+    const monthsAhead = options.monthsAhead ?? env.SYNC_MONTHS_AHEAD;
+    const now = new Date();
+    const startDate = now.toISOString().slice(0, 10);
+    const endDateObj = new Date(now);
+    endDateObj.setMonth(endDateObj.getMonth() + monthsAhead);
+    const endDate = endDateObj.toISOString().slice(0, 10);
+    const dateRange = { startDate, endDate };
+    const currentYear = now.getFullYear();
+
+    logger.info(
+      { monthsAhead, startDate, endDate },
+      "Starting gig sync (three-pass approach with auto-detection)"
+    );
 
     const stats: SyncStats = {
       searchResults: 0,
@@ -41,33 +56,35 @@ export class SyncGigsCommand {
     try {
       // Clear existing gigs if requested
       if (options.clearExisting) {
-        logger.info('=== CLEARING EXISTING GIGS ===');
+        logger.info("=== CLEARING EXISTING GIGS ===");
         const deletedCount = await this.gigs.deleteAllGigs();
-        logger.info({ deletedCount }, 'Cleared existing gigs');
+        logger.info({ deletedCount }, "Cleared existing gigs");
       }
 
       // PASS 1: Discovery
-      logger.info('=== PASS 1: Discovery ===');
+      logger.info("=== PASS 1: Discovery ===");
 
       // Step 1: Search with Brave using multiple focused queries
       const queries: { query: string; options: SearchOptions }[] = [
         {
-          query: 'συναυλίες Αθήνα 2026',
-          options: { country: 'GR', searchLang: 'el', extraSnippets: true },
+          query: `συναυλίες Αθήνα ${currentYear}`,
+          options: { country: "GR", searchLang: "el", extraSnippets: true },
         },
         {
-          query: 'rock metal alternative concerts Athens Greece 2026',
-          options: { country: 'GR', extraSnippets: true },
+          query: `rock metal alternative concerts Athens Greece ${currentYear}`,
+          options: { country: "GR", extraSnippets: true },
         },
         {
-          query: 'live music Athens venues upcoming shows 2026',
-          options: { country: 'GR', extraSnippets: true },
+          query: `live music Athens venues upcoming shows ${currentYear}`,
+          options: { country: "GR", extraSnippets: true },
         },
       ];
 
       const allResults: SearchResult[] = [];
       for (let i = 0; i < queries.length; i++) {
-        if (i > 0) await new Promise((r) => setTimeout(r, 1100));
+        if (i > 0) {
+          await new Promise((r) => setTimeout(r, 1100));
+        }
         const { query, options } = queries[i];
         const results = await this.search.search(query, 20, options);
         allResults.push(...results);
@@ -76,7 +93,9 @@ export class SyncGigsCommand {
       // Deduplicate by URL
       const seen = new Set<string>();
       const searchResults = allResults.filter((r) => {
-        if (seen.has(r.url)) return false;
+        if (seen.has(r.url)) {
+          return false;
+        }
         seen.add(r.url);
         return true;
       });
@@ -85,21 +104,21 @@ export class SyncGigsCommand {
       logger.info(
         {
           count: searchResults.length,
-          urls: searchResults.map(r => r.url)
+          urls: searchResults.map((r) => r.url),
         },
-        'Found search results (merged and deduplicated)'
+        "Found search results (merged and deduplicated)"
       );
 
       if (searchResults.length === 0) {
-        logger.warn('No search results found, aborting sync');
+        logger.warn("No search results found, aborting sync");
         return stats;
       }
 
       // Step 2: Filter promising URLs with Gemini
       const promisingUrls = await this.llm.filterPromisingUrls(searchResults);
       const hardcodedUrls = [
-        'https://www.more.com/music/concerts/',
-        'https://www.more.com/gr-el/tickets/music/',
+        "https://www.more.com/music/concerts/",
+        "https://www.more.com/gr-el/tickets/music/",
       ];
       for (const url of hardcodedUrls) {
         if (!promisingUrls.includes(url)) {
@@ -110,27 +129,30 @@ export class SyncGigsCommand {
       logger.info(
         {
           count: promisingUrls.length,
-          urls: promisingUrls
+          urls: promisingUrls,
         },
-        'Filtered to promising URLs'
+        "Filtered to promising URLs"
       );
 
       if (promisingUrls.length === 0) {
-        logger.warn('No promising URLs found, aborting sync');
+        logger.warn("No promising URLs found, aborting sync");
         return stats;
       }
 
       // PASS 2: Link Extraction (NEW)
-      logger.info('=== PASS 2: Link Extraction ===');
+      logger.info("=== PASS 2: Link Extraction ===");
 
       const scrapedListingPages = await this.scraper.scrapeMany(promisingUrls);
       const successfulScrapes = scrapedListingPages.filter((sc) => sc.success);
-      logger.info({ count: successfulScrapes.length }, 'Successfully scraped listing pages');
+      logger.info({ count: successfulScrapes.length }, "Successfully scraped listing pages");
 
       // Collect all event detail URLs
       const allEventDetailUrls: string[] = [];
+      const geminiDelayMs =
+        env.GEMINI_RATE_LIMIT_RPM > 0 ? Math.ceil(60000 / env.GEMINI_RATE_LIMIT_RPM) : 0;
 
-      for (const scrapedPage of successfulScrapes) {
+      for (let idx = 0; idx < successfulScrapes.length; idx++) {
+        const scrapedPage = successfulScrapes[idx];
         if (scrapedPage.links && scrapedPage.links.length > 0) {
           // Page has links - likely a listing page
           logger.info(
@@ -138,7 +160,7 @@ export class SyncGigsCommand {
               url: scrapedPage.url,
               linkCount: scrapedPage.links.length,
             },
-            'Found links on page, filtering for event details'
+            "Found links on page, filtering for event details"
           );
 
           const eventUrls = await this.llm.filterEventDetailUrls(scrapedPage.links, {
@@ -151,15 +173,20 @@ export class SyncGigsCommand {
               url: scrapedPage.url,
               foundEventUrls: eventUrls.length,
             },
-            'Extracted event detail URLs'
+            "Extracted event detail URLs"
           );
+
+          // Delay between Gemini calls to respect rate limits
+          if (geminiDelayMs > 0 && idx < successfulScrapes.length - 1) {
+            await new Promise((r) => setTimeout(r, geminiDelayMs));
+          }
         } else {
           // No links found - might already be a detail page
           logger.info(
             {
               url: scrapedPage.url,
             },
-            'No links found, treating as potential detail page'
+            "No links found, treating as potential detail page"
           );
 
           allEventDetailUrls.push(scrapedPage.url);
@@ -168,10 +195,10 @@ export class SyncGigsCommand {
 
       // Deduplicate URLs
       const uniqueEventUrls = [...new Set(allEventDetailUrls)];
-      logger.info({ count: uniqueEventUrls.length }, 'Total unique event detail URLs');
+      logger.info({ count: uniqueEventUrls.length }, "Total unique event detail URLs");
 
       if (uniqueEventUrls.length === 0) {
-        logger.warn('No event detail URLs found, aborting sync');
+        logger.warn("No event detail URLs found, aborting sync");
         return stats;
       }
 
@@ -184,32 +211,32 @@ export class SyncGigsCommand {
       if (limitedEventUrls.length < uniqueEventUrls.length) {
         logger.info(
           { original: uniqueEventUrls.length, limited: limitedEventUrls.length },
-          'Limited detail pages to process'
+          "Limited detail pages to process"
         );
       }
 
       // PASS 3: Detail Extraction
-      logger.info('=== PASS 3: Detail Extraction ===');
+      logger.info("=== PASS 3: Detail Extraction ===");
 
       const scrapedDetailPages = await this.scraper.scrapeMany(limitedEventUrls);
       const successfulDetails = scrapedDetailPages.filter((sc) => sc.success);
       stats.scrapedUrls = successfulDetails.length;
-      logger.info({ count: successfulDetails.length }, 'Successfully scraped detail pages');
+      logger.info({ count: successfulDetails.length }, "Successfully scraped detail pages");
 
       // Extract gigs from detail pages
       let allGigs: Gig[] = [];
       try {
-        allGigs = await this.llm.extractGigsFromMultiplePages(successfulDetails);
+        allGigs = await this.llm.extractGigsFromMultiplePages(successfulDetails, dateRange);
       } catch (error) {
-        logger.error({ error }, 'Failed to extract gigs from batch');
+        logger.error({ error }, "Failed to extract gigs from batch");
         stats.errors++;
       }
 
       stats.gigsExtracted = allGigs.length;
-      logger.info({ count: allGigs.length }, 'Extracted total gigs');
+      logger.info({ count: allGigs.length }, "Extracted total gigs");
 
       if (allGigs.length === 0) {
-        logger.warn('No gigs extracted, sync complete');
+        logger.warn("No gigs extracted, sync complete");
         return stats;
       }
 
@@ -219,7 +246,7 @@ export class SyncGigsCommand {
           // Check if gig already exists
           const existingGigId = await this.gigs.findGig(gig.title, gig.date);
           if (existingGigId) {
-            logger.info({ title: gig.title, date: gig.date }, 'Skipping duplicate gig');
+            logger.info({ title: gig.title, date: gig.date }, "Skipping duplicate gig");
             stats.gigsSkipped++;
             continue;
           }
@@ -231,12 +258,12 @@ export class SyncGigsCommand {
           await this.gigs.createGig(gig, venueId);
           stats.gigsCreated++;
         } catch (error) {
-          logger.error({ gig: gig.title, error }, 'Failed to store gig');
+          logger.error({ gig: gig.title, error }, "Failed to store gig");
           stats.errors++;
         }
       }
 
-      logger.info('=== Sync Complete ===');
+      logger.info("=== Sync Complete ===");
       logger.info(
         {
           searchResults: stats.searchResults,
@@ -247,12 +274,12 @@ export class SyncGigsCommand {
           gigsSkipped: stats.gigsSkipped,
           errors: stats.errors,
         },
-        'Sync statistics'
+        "Sync statistics"
       );
 
       return stats;
     } catch (error) {
-      logger.error({ error }, 'Fatal error during sync');
+      logger.error({ error }, "Fatal error during sync");
       stats.errors++;
       throw error;
     }

@@ -24,8 +24,20 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.11.0",
+  "lint-staged": {
+    "apps/gig-crawler/src/**/*.ts": [
+      "prettier --write",
+      "eslint --no-warn-ignored"
+    ],
+    "*.{js,mjs,ts,tsx,astro,json,css}": "prettier --write"
+  },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
-    "prettier-plugin-astro": "^0.14.1"
+    "prettier-plugin-astro": "^0.14.1",
+    "typescript-eslint": "^8.56.1"
   }
 }

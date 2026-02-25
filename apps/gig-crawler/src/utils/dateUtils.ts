@@ -1,5 +1,7 @@
 export function parseFlexibleDate(dateStr: string): Date | null {
-  if (!dateStr) return null;
+  if (!dateStr) {
+    return null;
+  }
 
   // Try ISO format
   const isoDate = new Date(dateStr);
@@ -19,18 +21,10 @@ export function parseFlexibleDate(dateStr: string): Date | null {
     if (match) {
       if (format.source.startsWith("^(\\d{4})")) {
         // YYYY-MM-DD
-        return new Date(
-          parseInt(match[1]),
-          parseInt(match[2]) - 1,
-          parseInt(match[3])
-        );
+        return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
       } else {
         // DD/MM/YYYY or DD-MM-YYYY
-        return new Date(
-          parseInt(match[3]),
-          parseInt(match[2]) - 1,
-          parseInt(match[1])
-        );
+        return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
       }
     }
   }

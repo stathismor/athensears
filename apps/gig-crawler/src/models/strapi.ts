@@ -25,11 +25,7 @@ export const StrapiGigEntitySchema = z.object({
   price: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   url: z.string().nullable().optional(),
-  venue: z.union([
-    z.number(),
-    StrapiVenueEntitySchema,
-    z.null()
-  ]).optional(),
+  venue: z.union([z.number(), StrapiVenueEntitySchema, z.null()]).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   publishedAt: z.string().nullable().optional(),

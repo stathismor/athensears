@@ -13,10 +13,7 @@ export class StrapiAdapter implements GigsPort {
   private readonly client: AxiosInstance;
   private readonly venueCache: Map<string, number> = new Map();
 
-  constructor(
-    apiUrl: string = env.STRAPI_API_URL,
-    apiToken: string = env.STRAPI_API_TOKEN
-  ) {
+  constructor(apiUrl: string = env.STRAPI_API_URL, apiToken: string = env.STRAPI_API_TOKEN) {
     this.client = axios.create({
       baseURL: apiUrl,
       headers: {
@@ -27,9 +24,7 @@ export class StrapiAdapter implements GigsPort {
     });
   }
 
-  async findVenueByName(
-    name: string
-  ): Promise<{ id: number; venue: Venue } | null> {
+  async findVenueByName(name: string): Promise<{ id: number; venue: Venue } | null> {
     // Check cache first (case-insensitive)
     const cacheKey = name.toLowerCase();
     if (this.venueCache.has(cacheKey)) {
@@ -94,10 +89,7 @@ export class StrapiAdapter implements GigsPort {
       {
         maxAttempts: 3,
         onError: (error, attempt) => {
-          logger.warn(
-            { error, attempt, venue: venue.name },
-            "Create venue attempt failed"
-          );
+          logger.warn({ error, attempt, venue: venue.name }, "Create venue attempt failed");
         },
       }
     );
@@ -145,10 +137,7 @@ export class StrapiAdapter implements GigsPort {
 
         if (parsed.data && !Array.isArray(parsed.data)) {
           const id = parsed.data.id;
-          logger.info(
-            { title: gig.title, date: gig.date, id },
-            "Created gig"
-          );
+          logger.info({ title: gig.title, date: gig.date, id }, "Created gig");
           return id;
         }
 
@@ -159,7 +148,7 @@ export class StrapiAdapter implements GigsPort {
         onError: (error, attempt) => {
           // Extract detailed error info from Axios errors
           let errorDetail = error;
-          if (error && typeof error === 'object' && 'response' in error) {
+          if (error && typeof error === "object" && "response" in error) {
             const axiosError = error as any;
             errorDetail = {
               status: axiosError.response?.status,
@@ -239,7 +228,10 @@ export class StrapiAdapter implements GigsPort {
       try {
         logger.info({ id: gig.id, documentId: gig.documentId }, "Deleting gig");
         const deleteResponse = await this.client.delete(`/api/gigs/${gig.documentId}`);
-        logger.info({ id: gig.id, documentId: gig.documentId, status: deleteResponse.status }, "Gig deleted");
+        logger.info(
+          { id: gig.id, documentId: gig.documentId, status: deleteResponse.status },
+          "Gig deleted"
+        );
         deletedCount++;
       } catch (error) {
         logger.error({ id: gig.id, documentId: gig.documentId, error }, "Failed to delete gig");

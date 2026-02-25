@@ -23,8 +23,15 @@ export const EnvSchema = z.object({
   // Scraper
   SCRAPER_CONCURRENCY: z.string().default("5"),
 
+  // Gemini rate limiting & chunking
+  GEMINI_RATE_LIMIT_RPM: z.coerce.number().default(15),
+  GEMINI_CHUNK_SIZE: z.coerce.number().default(3),
+
   // Auth
   SYNC_API_KEY: z.string().optional(),
+
+  // Sync
+  SYNC_MONTHS_AHEAD: z.coerce.number().default(3),
 
   // Logging
   LOG_LEVEL: z.string().default("info"),

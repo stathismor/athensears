@@ -13,7 +13,11 @@ export class BraveSearchAdapter implements SearchPort {
     this.apiKey = apiKey;
   }
 
-  async search(query: string, count: number = 20, options: SearchOptions = {}): Promise<SearchResult[]> {
+  async search(
+    query: string,
+    count: number = 20,
+    options: SearchOptions = {}
+  ): Promise<SearchResult[]> {
     return retry(
       async () => {
         logger.info({ query, count }, "Searching Brave");
@@ -22,9 +26,15 @@ export class BraveSearchAdapter implements SearchPort {
           q: query,
           count: Math.min(count, 20),
         };
-        if (options.country) params.country = options.country;
-        if (options.searchLang) params.search_lang = options.searchLang;
-        if (options.extraSnippets) params.extra_snippets = true;
+        if (options.country) {
+          params.country = options.country;
+        }
+        if (options.searchLang) {
+          params.search_lang = options.searchLang;
+        }
+        if (options.extraSnippets) {
+          params.extra_snippets = true;
+        }
 
         const response = await axios.get(this.baseUrl, {
           headers: {

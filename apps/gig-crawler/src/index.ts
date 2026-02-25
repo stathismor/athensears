@@ -21,7 +21,7 @@ const gigsAdapter = new StrapiAdapter();
 let isSyncRunning = false;
 
 // Sync function
-async function syncGigs(options: { clearExisting?: boolean } = {}) {
+async function syncGigs(options: { clearExisting?: boolean; monthsAhead?: number } = {}) {
   if (isSyncRunning) {
     logger.warn("Sync already in progress, skipping");
     return;
@@ -31,12 +31,7 @@ async function syncGigs(options: { clearExisting?: boolean } = {}) {
   try {
     logger.info({ options }, "Starting gig sync");
 
-    const command = new SyncGigsCommand(
-      searchAdapter,
-      scraperAdapter,
-      llmAdapter,
-      gigsAdapter
-    );
+    const command = new SyncGigsCommand(searchAdapter, scraperAdapter, llmAdapter, gigsAdapter);
 
     const stats = await command.execute(options);
     logger.info({ stats }, "Sync completed successfully");
@@ -68,6 +63,9 @@ app.post("/api/sync", (req, res) => {
 
   // Default to clearing existing data (use ?clear=false to keep old data)
   const clearExisting = req.query.clear !== "false";
+  const monthsAhead = req.query.monthsAhead
+    ? parseInt(req.query.monthsAhead as string, 10)
+    : undefined;
 
   if (isSyncRunning) {
     return res.status(409).json({
@@ -76,10 +74,10 @@ app.post("/api/sync", (req, res) => {
     });
   }
 
-  logger.info({ clearExisting }, "Manual sync triggered via API");
+  logger.info({ clearExisting, monthsAhead }, "Manual sync triggered via API");
 
   // Start sync in background (don't await)
-  syncGigs({ clearExisting }).catch((error) => {
+  syncGigs({ clearExisting, monthsAhead }).catch((error) => {
     logger.error({ error }, "Background sync failed");
   });
 
@@ -90,6 +88,71 @@ app.post("/api/sync", (req, res) => {
       ? "Sync started (clearing existing gigs first)"
       : "Sync started in background (keeping existing data)",
   });
+});
+
+// Dry-run delete endpoint — shows what would be deleted, then deletes
+app.post("/api/gigs/delete", async (req, res) => {
+  if (env.SYNC_API_KEY) {
+    const auth = req.headers.authorization;
+    if (auth !== `Bearer ${env.SYNC_API_KEY}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+  }
+
+  const dryRun = req.query.dryRun !== "false";
+
+  try {
+    // Fetch all non-manual gigs (same filter as deleteAllGigsIndividual)
+    const strapiUrl = env.STRAPI_API_URL;
+    const response = await fetch(
+      `${strapiUrl}/api/gigs?pagination[pageSize]=100&filters[manual][$ne]=true`,
+      {
+        headers: { Authorization: `Bearer ${env.STRAPI_API_TOKEN}` },
+      }
+    );
+    const data = (await response.json()) as any;
+    const gigs = Array.isArray(data.data) ? data.data : [];
+
+    // Also fetch manual gigs to show what's protected
+    const manualResponse = await fetch(
+      `${strapiUrl}/api/gigs?pagination[pageSize]=100&filters[manual][$eq]=true`,
+      {
+        headers: { Authorization: `Bearer ${env.STRAPI_API_TOKEN}` },
+      }
+    );
+    const manualData = (await manualResponse.json()) as any;
+    const manualGigs = Array.isArray(manualData.data) ? manualData.data : [];
+
+    const summary = {
+      wouldDelete: gigs.map((g: any) => ({
+        id: g.id,
+        documentId: g.documentId,
+        title: g.title,
+        date: g.date,
+        manual: g.manual,
+      })),
+      protected: manualGigs.map((g: any) => ({
+        id: g.id,
+        documentId: g.documentId,
+        title: g.title,
+        date: g.date,
+        manual: g.manual,
+      })),
+      counts: { toDelete: gigs.length, protected: manualGigs.length },
+      dryRun,
+    };
+
+    if (dryRun) {
+      return res.json({ status: "dry_run", ...summary });
+    }
+
+    // Actually delete
+    const deletedCount = await gigsAdapter.deleteAllGigs();
+    return res.json({ status: "deleted", deletedCount, ...summary });
+  } catch (error: any) {
+    logger.error({ error }, "Delete endpoint failed");
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // Sync status endpoint
@@ -114,10 +177,7 @@ app.get("/", (req, res) => {
 });
 
 // Schedule cron job
-logger.info(
-  { schedule: env.CRON_SCHEDULE, timezone: env.TZ },
-  "Scheduling cron job"
-);
+logger.info({ schedule: env.CRON_SCHEDULE, timezone: env.TZ }, "Scheduling cron job");
 
 cron.schedule(
   env.CRON_SCHEDULE,

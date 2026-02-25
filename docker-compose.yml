@@ -56,12 +56,10 @@ services:
       dockerfile: apps/gig-crawler/Dockerfile.dev
     container_name: athensears-gig-crawler
     restart: unless-stopped
+    env_file:
+      - apps/gig-crawler/.env
     environment:
       STRAPI_API_URL: http://cms:1337
-      STRAPI_API_TOKEN: ${STRAPI_API_TOKEN}
-      BRAVE_API_KEY: ${BRAVE_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       PORT: 3000
       NODE_ENV: development
       TZ: Europe/Athens

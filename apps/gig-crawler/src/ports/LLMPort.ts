@@ -9,14 +9,12 @@ export interface LLMPort {
   filterPromisingUrls(searchResults: SearchResult[]): Promise<string[]>;
 
   /**
-   * Extract structured gig data from scraped content (Pass 2)
+   * Extract structured gig data from multiple scraped pages in one call (Pass 2)
    */
-  extractGigsFromContent(scrapedContent: ScrapedContent): Promise<Gig[]>;
-
-  /**
-   * Extract structured gig data from multiple scraped pages in one call (Pass 2 - Batch)
-   */
-  extractGigsFromMultiplePages(scrapedContents: ScrapedContent[]): Promise<Gig[]>;
+  extractGigsFromMultiplePages(
+    scrapedContents: ScrapedContent[],
+    dateRange?: { startDate: string; endDate: string }
+  ): Promise<Gig[]>;
 
   /**
    * Filter links to identify event detail URLs (Pass 2)

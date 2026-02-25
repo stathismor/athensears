@@ -1,6 +1,8 @@
 export const GIG_EXTRACTION_BATCH_PROMPT = (
-  scrapedPages: Array<{ url: string; content: string }>
+  scrapedPages: Array<{ url: string; content: string }>,
+  dateRange?: { startDate: string; endDate: string }
 ) => `You are extracting structured information about live music events, concerts, and gigs in Athens, Greece from multiple web pages.
+${dateRange ? `\n**Date Range:** Only extract events between ${dateRange.startDate} and ${dateRange.endDate}. Skip any events outside this range.\n` : ""}
 
 **CRITICAL - Genre Filter:**
 ONLY extract events from these genres:
@@ -23,12 +25,11 @@ Extract all upcoming music events from ALL the pages below that match the genre 
 - **date** (required): Event date and time in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
 - **venue_name** (required): Name of the venue where the event takes place
 - **description** (optional): Event description, genre, or additional details
-- **price** (required): Ticket price. MUST be one of:
-  - A specific price in euros: "€15", "€20", etc.
-  - A price range: "€20-€30"
+- **price** (required): Ticket price. Return ONLY the minimum/starting price as a single value "€X" (e.g. "€15"). If multiple prices are listed (e.g. "€16, 18€, 20€"), return only the lowest one as "€16". Never return a list or comma-separated prices. Use:
+  - "€X" for a specific price
   - "Free" if the event is free
   - "N/A" if price is not mentioned or unknown
-- **ticket_url** (optional): Direct link to ticket purchase or event detail page (e.g. more.com, viva.gr)
+- **ticket_url** (optional): Full URL to the specific event's ticket page. Must be a complete URL with path (e.g. https://www.more.com/music/concerts/artist-name-12345/). Do NOT return bare domains like "more.com". Omit if no specific event URL is found.
 - **image_url** (optional): URL of event poster or image
 
 - **url** (required): The Source URL of the page where this event was found (from the "Source URL:" field above each page)
@@ -41,8 +42,8 @@ Extract all upcoming music events from ALL the pages below that match the genre 
 5. **Title format:** Keep titles concise with ONLY the artist/band name. DO NOT include the venue in the title. If the title contains "@" or "at", remove everything after it. Examples:
    - "Wildfire @ KYTTARO" → "Wildfire"
    - "Band Name at Venue" → "Band Name"
-6. **Price format:** Look for ticket prices in the content. Common indicators: "€", "EUR", "euro", "price", "admission", "tickets", "entrance fee". If no price is found, use "N/A"
-7. **Ticket links:** Look for ticket purchase links in the content (e.g. more.com, viva.gr, ticketmaster) and include them as ticket_url
+6. **Price format:** Return only the minimum/starting price as "€X". If you see multiple prices, pick the lowest. Common indicators: "€", "EUR", "euro", "price", "admission", "tickets", "entrance fee". If no price is found, use "N/A"
+7. **Ticket links:** Look for full ticket purchase URLs (not bare domains). Only include a ticket_url if you find a complete URL with a path to the specific event page
 8. **URL field:** For each event, set "url" to the "Source URL" shown at the top of the page where you found the event
 9. Extract events from ALL pages provided
 10. If a page has no events, skip it and move to the next
@@ -65,7 +66,7 @@ ${page.content.slice(0, 15000)}
 ---
 `
   )
-  .join('\n')}
+  .join("\n")}
 
 **Output Format:**
 Return your response as a JSON object with this exact structure:

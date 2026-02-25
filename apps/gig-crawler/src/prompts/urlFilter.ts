@@ -1,4 +1,6 @@
-export const URL_FILTER_PROMPT = (searchResults: string) => `You are helping to find live music events, concerts, and gigs in Athens, Greece.
+export const URL_FILTER_PROMPT = (
+  searchResults: string
+) => `You are helping to find live music events, concerts, and gigs in Athens, Greece.
 
 Below are search results from a web search. Your task is to filter these results and identify the most promising URLs that are likely to contain information about upcoming live music events in Athens.
 
