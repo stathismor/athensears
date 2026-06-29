@@ -3,6 +3,7 @@ import type { LLMPort } from "../ports/LLMPort.js";
 import type { GigsPort } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
 import { activeSources, type GigSource } from "../models/sources.js";
+import { normalizeVenueName } from "../models/venueAliases.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
 
@@ -268,7 +269,10 @@ export class SyncGigsCommand {
 
     const byKey = new Map<string, Gig>();
     for (const gig of gigs) {
-      const key = `${normalizeTitle(gig.title)}|${gig.date.toISOString().slice(0, 10)}|${gig.venueName.toLowerCase()}`;
+      // Key on the CANONICAL venue (same as storage) so e.g. "Plateia Nerou",
+      // "Παλαιό Φάληρο" and "Release Athens" collapse to one event.
+      const venueKey = normalizeVenueName(gig.venueName).toLowerCase();
+      const key = `${normalizeTitle(gig.title)}|${gig.date.toISOString().slice(0, 10)}|${venueKey}`;
       const existing = byKey.get(key);
       if (!existing) {
         byKey.set(key, gig);
