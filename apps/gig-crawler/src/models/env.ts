@@ -11,7 +11,7 @@ export const EnvSchema = z.object({
 
   // Google Gemini API
   GEMINI_API_KEY: z.string(),
-  GEMINI_MODEL: z.string().default("gemini-1.5-flash-latest"),
+  GEMINI_MODEL: z.string().default("gemini-flash-latest"),
 
   // Server
   PORT: z.string().default("3000"),
