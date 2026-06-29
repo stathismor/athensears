@@ -5,8 +5,9 @@ export const EnvSchema = z.object({
   STRAPI_API_URL: z.string().default("http://localhost:1337"),
   STRAPI_API_TOKEN: z.string(),
 
-  // Brave Web Search API
-  BRAVE_API_KEY: z.string(),
+  // Brave Web Search API (no longer used — discovery now driven by the curated
+  // source registry in models/sources.ts; kept optional for backwards compat)
+  BRAVE_API_KEY: z.string().optional(),
 
   // Google Gemini API
   GEMINI_API_KEY: z.string(),

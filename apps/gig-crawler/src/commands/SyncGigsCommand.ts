@@ -1,26 +1,36 @@
-import type { SearchPort } from "../ports/SearchPort.js";
-import type { SearchOptions } from "../ports/SearchPort.js";
 import type { ScraperPort } from "../ports/ScraperPort.js";
 import type { LLMPort } from "../ports/LLMPort.js";
 import type { GigsPort } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
-import type { SearchResult } from "../models/searchResult.js";
+import { activeSources, type GigSource } from "../models/sources.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
 
 export interface SyncStats {
-  searchResults: number;
-  filteredUrls: number;
-  scrapedUrls: number;
+  sources: number;
+  listingPagesScraped: number;
+  detailUrlsFound: number;
+  detailPagesScraped: number;
   gigsExtracted: number;
   gigsCreated: number;
-  gigsSkipped: number;
+  gigsUpdated: number;
+  gigsSkippedManual: number;
   errors: number;
 }
 
+/** Cap detail pages crawled per source — keeps cost bounded and diversifies coverage. */
+const MAX_DETAIL_PAGES_PER_SOURCE = 30;
+
+/**
+ * Walks the curated source registry every run:
+ *   Pass A — scrape each source's listing page(s) and discover event-detail URLs.
+ *   Pass B — scrape those detail pages and extract structured, taste-filtered gigs.
+ * Then upserts into the CMS (create new, update existing auto gigs, never touch
+ * hand-edited `manual` gigs). The run is non-destructive: a bad scrape night leaves
+ * existing gigs in place rather than clearing the site.
+ */
 export class SyncGigsCommand {
   constructor(
-    private readonly search: SearchPort,
     private readonly scraper: ScraperPort,
     private readonly llm: LLMPort,
     private readonly gigs: GigsPort
@@ -36,286 +46,200 @@ export class SyncGigsCommand {
     endDateObj.setMonth(endDateObj.getMonth() + monthsAhead);
     const endDate = endDateObj.toISOString().slice(0, 10);
     const dateRange = { startDate, endDate };
-    const currentYear = now.getFullYear();
-
-    logger.info(
-      { monthsAhead, startDate, endDate },
-      "Starting gig sync (three-pass approach with auto-detection)"
-    );
 
     const stats: SyncStats = {
-      searchResults: 0,
-      filteredUrls: 0,
-      scrapedUrls: 0,
+      sources: 0,
+      listingPagesScraped: 0,
+      detailUrlsFound: 0,
+      detailPagesScraped: 0,
       gigsExtracted: 0,
       gigsCreated: 0,
-      gigsSkipped: 0,
+      gigsUpdated: 0,
+      gigsSkippedManual: 0,
       errors: 0,
     };
 
+    const sources = activeSources();
+    stats.sources = sources.length;
+
+    logger.info(
+      { monthsAhead, startDate, endDate, sources: sources.map((s) => s.id) },
+      "Starting gig sync (curated source registry)"
+    );
+
     try {
-      // Clear existing gigs if requested
+      // Opt-in destructive clear (never the default — a failed run must not empty the site)
       if (options.clearExisting) {
-        logger.info("=== CLEARING EXISTING GIGS ===");
+        logger.info("=== CLEARING EXISTING GIGS (explicit) ===");
         const deletedCount = await this.gigs.deleteAllGigs();
         logger.info({ deletedCount }, "Cleared existing gigs");
       }
 
-      // PASS 1: Discovery
-      logger.info("=== PASS 1: Discovery ===");
-
-      // Step 1: Search with Brave using multiple focused queries
-      const queries: { query: string; options: SearchOptions }[] = [
-        {
-          query: `συναυλίες Αθήνα ${currentYear}`,
-          options: { country: "GR", searchLang: "el", extraSnippets: true },
-        },
-        {
-          query: `rock metal alternative concerts Athens Greece ${currentYear}`,
-          options: { country: "GR", extraSnippets: true },
-        },
-        {
-          query: `live music Athens venues upcoming shows ${currentYear}`,
-          options: { country: "GR", extraSnippets: true },
-        },
-      ];
-
-      const allResults: SearchResult[] = [];
-      for (let i = 0; i < queries.length; i++) {
-        if (i > 0) {
-          await new Promise((r) => setTimeout(r, 1100));
-        }
-        const { query, options } = queries[i];
-        const results = await this.search.search(query, 20, options);
-        allResults.push(...results);
-      }
-
-      // Deduplicate by URL
-      const seen = new Set<string>();
-      const searchResults = allResults.filter((r) => {
-        if (seen.has(r.url)) {
-          return false;
-        }
-        seen.add(r.url);
-        return true;
-      });
-
-      stats.searchResults = searchResults.length;
-      logger.info(
-        {
-          count: searchResults.length,
-          urls: searchResults.map((r) => r.url),
-        },
-        "Found search results (merged and deduplicated)"
-      );
-
-      if (searchResults.length === 0) {
-        logger.warn("No search results found, aborting sync");
+      if (sources.length === 0) {
+        logger.warn("No enabled sources in registry, aborting sync");
         return stats;
       }
 
-      // Step 2: Filter promising URLs with Gemini
-      const promisingUrls = await this.llm.filterPromisingUrls(searchResults);
-      const hardcodedUrls = [
-        "https://www.ticketservices.gr/en/LiveConcerts/",
-        "https://www.athinorama.gr/concerts/",
-      ];
-      for (const url of hardcodedUrls) {
-        if (!promisingUrls.includes(url)) {
-          promisingUrls.push(url);
+      // Collect gigs source by source (so we can stamp the known venue per source)
+      const allGigs: Gig[] = [];
+      for (const source of sources) {
+        try {
+          const sourceGigs = await this.collectFromSource(source, dateRange, stats);
+          logger.info({ source: source.id, gigs: sourceGigs.length }, "Collected gigs from source");
+          allGigs.push(...sourceGigs);
+        } catch (error) {
+          logger.error({ source: source.id, error }, "Failed to collect from source");
+          stats.errors++;
         }
-      }
-      stats.filteredUrls = promisingUrls.length;
-      logger.info(
-        {
-          count: promisingUrls.length,
-          urls: promisingUrls,
-        },
-        "Filtered to promising URLs"
-      );
-
-      if (promisingUrls.length === 0) {
-        logger.warn("No promising URLs found, aborting sync");
-        return stats;
-      }
-
-      // PASS 2: Link Extraction (NEW)
-      logger.info("=== PASS 2: Link Extraction ===");
-
-      const scrapedListingPages = await this.scraper.scrapeMany(promisingUrls);
-      const successfulScrapes = scrapedListingPages.filter((sc) => sc.success);
-      logger.info({ count: successfulScrapes.length }, "Successfully scraped listing pages");
-
-      // Collect all event detail URLs
-      const allEventDetailUrls: string[] = [];
-      const geminiDelayMs =
-        env.GEMINI_RATE_LIMIT_RPM > 0 ? Math.ceil(60000 / env.GEMINI_RATE_LIMIT_RPM) : 0;
-
-      for (let idx = 0; idx < successfulScrapes.length; idx++) {
-        const scrapedPage = successfulScrapes[idx];
-        if (scrapedPage.links && scrapedPage.links.length > 0) {
-          // Page has links - likely a listing page
-          logger.info(
-            {
-              url: scrapedPage.url,
-              linkCount: scrapedPage.links.length,
-            },
-            "Found links on page, filtering for event details"
-          );
-
-          const eventUrls = await this.llm.filterEventDetailUrls(scrapedPage.links, {
-            url: scrapedPage.url,
-          });
-
-          allEventDetailUrls.push(...eventUrls);
-          logger.info(
-            {
-              url: scrapedPage.url,
-              foundEventUrls: eventUrls.length,
-            },
-            "Extracted event detail URLs"
-          );
-
-          // Delay between Gemini calls to respect rate limits
-          if (geminiDelayMs > 0 && idx < successfulScrapes.length - 1) {
-            await new Promise((r) => setTimeout(r, geminiDelayMs));
-          }
-        } else {
-          // No links found - might already be a detail page
-          logger.info(
-            {
-              url: scrapedPage.url,
-            },
-            "No links found, treating as potential detail page"
-          );
-
-          allEventDetailUrls.push(scrapedPage.url);
-        }
-      }
-
-      // Deduplicate URLs
-      const uniqueEventUrls = [...new Set(allEventDetailUrls)];
-      logger.info({ count: uniqueEventUrls.length }, "Total unique event detail URLs");
-
-      if (uniqueEventUrls.length === 0) {
-        logger.warn("No event detail URLs found, aborting sync");
-        return stats;
-      }
-
-      // Shuffle URLs to get diversity from all sources (not just first source)
-      const shuffledUrls = uniqueEventUrls.sort(() => Math.random() - 0.5);
-
-      // Limit to first 100 URLs (increased from 20 for more gigs)
-      const MAX_DETAIL_PAGES = 100;
-      const limitedEventUrls = shuffledUrls.slice(0, MAX_DETAIL_PAGES);
-      if (limitedEventUrls.length < uniqueEventUrls.length) {
-        logger.info(
-          { original: uniqueEventUrls.length, limited: limitedEventUrls.length },
-          "Limited detail pages to process"
-        );
-      }
-
-      // PASS 3: Detail Extraction
-      logger.info("=== PASS 3: Detail Extraction ===");
-
-      const scrapedDetailPages = await this.scraper.scrapeMany(limitedEventUrls);
-      const successfulDetails = scrapedDetailPages.filter((sc) => sc.success);
-      stats.scrapedUrls = successfulDetails.length;
-      logger.info({ count: successfulDetails.length }, "Successfully scraped detail pages");
-
-      // Extract gigs from detail pages
-      let allGigs: Gig[] = [];
-      try {
-        allGigs = await this.llm.extractGigsFromMultiplePages(successfulDetails, dateRange);
-      } catch (error) {
-        logger.error({ error }, "Failed to extract gigs from batch");
-        stats.errors++;
       }
 
       stats.gigsExtracted = allGigs.length;
-      logger.info({ count: allGigs.length }, "Extracted total gigs");
+      logger.info({ count: allGigs.length }, "Extracted total gigs across all sources");
 
       if (allGigs.length === 0) {
-        logger.warn("No gigs extracted, sync complete");
+        logger.warn("No gigs extracted, sync complete (existing gigs left untouched)");
         return stats;
       }
 
-      // Step 5: Validate gig URLs (lightweight HEAD requests)
-      logger.info("Validating gig URLs...");
-      const validatedGigs: Gig[] = [];
-      for (const gig of allGigs) {
-        if (gig.url) {
-          try {
-            const res = await fetch(gig.url, {
-              method: "HEAD",
-              redirect: "follow",
-              signal: AbortSignal.timeout(5000),
-            });
-            if (res.ok) {
-              validatedGigs.push(gig);
-            } else {
-              logger.warn(
-                { title: gig.title, url: gig.url, status: res.status },
-                "Dropping gig with broken URL"
-              );
-            }
-          } catch {
-            logger.warn(
-              { title: gig.title, url: gig.url },
-              "Dropping gig with unreachable URL"
-            );
-          }
-        } else {
-          validatedGigs.push(gig);
-        }
-      }
-      logger.info(
-        { before: allGigs.length, after: validatedGigs.length },
-        "URL validation complete"
-      );
+      // Keep gigs whose ticket URL is broken — just drop the dead link (frontend
+      // falls back to the venue website). Never discard the gig itself.
+      const validatedGigs = await this.validateUrls(allGigs);
 
-      // Step 6: Store gigs in Strapi (with deduplication)
+      // Upsert into the CMS
       for (const gig of validatedGigs) {
         try {
-          // Check if gig already exists
-          const existingGigId = await this.gigs.findGig(gig.title, gig.date);
-          if (existingGigId) {
-            logger.info({ title: gig.title, date: gig.date }, "Skipping duplicate gig");
-            stats.gigsSkipped++;
+          const existing = await this.gigs.findGig(gig.title, gig.date);
+
+          if (existing?.manual) {
+            logger.info(
+              { title: gig.title, date: gig.date },
+              "Leaving hand-edited (manual) gig untouched"
+            );
+            stats.gigsSkippedManual++;
             continue;
           }
 
-          // Get or create venue
           const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
 
-          // Create gig
-          await this.gigs.createGig(gig, venueId);
-          stats.gigsCreated++;
+          if (existing) {
+            await this.gigs.updateGig(existing.documentId, gig, venueId);
+            stats.gigsUpdated++;
+          } else {
+            await this.gigs.createGig(gig, venueId);
+            stats.gigsCreated++;
+          }
         } catch (error) {
           logger.error({ gig: gig.title, error }, "Failed to store gig");
           stats.errors++;
         }
       }
 
-      logger.info("=== Sync Complete ===");
-      logger.info(
-        {
-          searchResults: stats.searchResults,
-          filteredUrls: stats.filteredUrls,
-          scrapedUrls: stats.scrapedUrls,
-          gigsExtracted: stats.gigsExtracted,
-          gigsCreated: stats.gigsCreated,
-          gigsSkipped: stats.gigsSkipped,
-          errors: stats.errors,
-        },
-        "Sync statistics"
-      );
-
+      logger.info({ stats }, "=== Sync Complete ===");
       return stats;
     } catch (error) {
       logger.error({ error }, "Fatal error during sync");
       stats.errors++;
       throw error;
     }
+  }
+
+  /**
+   * Scrape one source's listing page(s), discover event-detail URLs, scrape those,
+   * and extract gigs. For venue sources, stamp the known canonical venue name.
+   */
+  private async collectFromSource(
+    source: GigSource,
+    dateRange: { startDate: string; endDate: string },
+    stats: SyncStats
+  ): Promise<Gig[]> {
+    logger.info({ source: source.id, listingUrls: source.listingUrls }, "=== Source ===");
+
+    // Pass A: scrape listing page(s)
+    const listingScrapes = await this.scraper.scrapeMany(source.listingUrls);
+    const okListings = listingScrapes.filter((s) => s.success);
+    stats.listingPagesScraped += okListings.length;
+
+    // Discover event-detail URLs from the links on each listing page
+    const detailUrls = new Set<string>();
+    const geminiDelayMs =
+      env.GEMINI_RATE_LIMIT_RPM > 0 ? Math.ceil(60000 / env.GEMINI_RATE_LIMIT_RPM) : 0;
+
+    for (let i = 0; i < okListings.length; i++) {
+      const page = okListings[i];
+      if (page.links && page.links.length > 0) {
+        const eventUrls = await this.llm.filterEventDetailUrls(page.links, { url: page.url });
+        eventUrls.forEach((u) => detailUrls.add(u));
+        if (geminiDelayMs > 0 && i < okListings.length - 1) {
+          await new Promise((r) => setTimeout(r, geminiDelayMs));
+        }
+      }
+    }
+
+    // Don't re-scrape the listing pages themselves; cap per source
+    for (const u of source.listingUrls) {
+      detailUrls.delete(u);
+    }
+    const detailList = [...detailUrls].slice(0, MAX_DETAIL_PAGES_PER_SOURCE);
+    stats.detailUrlsFound += detailList.length;
+
+    // Pass B: scrape detail pages
+    const detailScrapes = detailList.length > 0 ? await this.scraper.scrapeMany(detailList) : [];
+    const okDetails = detailScrapes.filter((s) => s.success);
+    stats.detailPagesScraped += okDetails.length;
+
+    // Choose pages to extract from:
+    // - venues: listing page (often an inline schedule) + detail pages
+    // - aggregators: detail pages only (listing is a pure index); fall back to the
+    //   listing page if no detail pages were discovered
+    const pagesToExtract =
+      source.type === "venue"
+        ? [...okListings, ...okDetails]
+        : okDetails.length > 0
+          ? okDetails
+          : okListings;
+
+    if (pagesToExtract.length === 0) {
+      logger.warn({ source: source.id }, "No pages to extract from for source");
+      return [];
+    }
+
+    let gigs = await this.llm.extractGigsFromMultiplePages(pagesToExtract, dateRange);
+
+    // Stamp the known venue for venue sources (kills venue-name drift / duplicates)
+    if (source.type === "venue" && source.venueName) {
+      const venueName = source.venueName;
+      gigs = gigs.map((g) => ({ ...g, venueName }));
+    }
+
+    return gigs;
+  }
+
+  /** HEAD-check ticket URLs in parallel; clear dead ones but keep the gig. */
+  private async validateUrls(gigs: Gig[]): Promise<Gig[]> {
+    const validated = await Promise.all(
+      gigs.map(async (gig) => {
+        if (!gig.url) {
+          return gig;
+        }
+        try {
+          const res = await fetch(gig.url, {
+            method: "HEAD",
+            redirect: "follow",
+            signal: AbortSignal.timeout(5000),
+          });
+          if (res.ok) {
+            return gig;
+          }
+          logger.warn(
+            { title: gig.title, url: gig.url, status: res.status },
+            "Clearing broken gig URL"
+          );
+        } catch {
+          logger.warn({ title: gig.title, url: gig.url }, "Clearing unreachable gig URL");
+        }
+        return { ...gig, url: undefined };
+      })
+    );
+    return validated;
   }
 }

@@ -96,7 +96,10 @@ export class StrapiAdapter implements GigsPort {
     );
   }
 
-  async findGig(title: string, date: Date): Promise<number | null> {
+  async findGig(
+    title: string,
+    date: Date
+  ): Promise<{ id: number; documentId: string; manual: boolean } | null> {
     return retry(
       async () => {
         const dateStr = date.toISOString().split("T")[0];
@@ -112,9 +115,10 @@ export class StrapiAdapter implements GigsPort {
         const parsed = StrapiGigResponseSchema.parse(response.data);
 
         if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-          const id = parsed.data[0].id;
-          logger.info({ title, date: dateStr, id }, "Found existing gig");
-          return id;
+          const entity = parsed.data[0];
+          const manual = entity.manual ?? false;
+          logger.info({ title, date: dateStr, id: entity.id, manual }, "Found existing gig");
+          return { id: entity.id, documentId: entity.documentId, manual };
         }
 
         return null;
@@ -162,6 +166,32 @@ export class StrapiAdapter implements GigsPort {
             { error: errorDetail, attempt, gig: gig.title, gigData: toStrapiGig(gig, venueId) },
             "Create gig attempt failed"
           );
+        },
+      }
+    );
+  }
+
+  async updateGig(documentId: string, gig: Gig, venueId: number): Promise<number> {
+    return retry(
+      async () => {
+        const strapiGig = toStrapiGig(gig, venueId);
+        // Strapi 5 updates by documentId
+        const response = await this.client.put(`/api/gigs/${documentId}`, strapiGig);
+
+        const parsed = StrapiGigResponseSchema.parse(response.data);
+
+        if (parsed.data && !Array.isArray(parsed.data)) {
+          const id = parsed.data.id;
+          logger.info({ title: gig.title, date: gig.date, id }, "Updated gig");
+          return id;
+        }
+
+        throw new Error("Failed to update gig: unexpected response format");
+      },
+      {
+        maxAttempts: 3,
+        onError: (error, attempt) => {
+          logger.warn({ error, attempt, gig: gig.title, documentId }, "Update gig attempt failed");
         },
       }
     );

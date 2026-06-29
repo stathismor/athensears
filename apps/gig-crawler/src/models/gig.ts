@@ -7,6 +7,7 @@ export const GigSchema = z.object({
   description: z.string().optional(),
   price: z.string().optional(),
   url: z.string().optional(),
+  genre: z.string().optional(),
   imageUrl: z.string().optional(),
 });
 
@@ -20,6 +21,7 @@ export const StrapiGigSchema = z.object({
     description: z.string().optional(),
     price: z.string().optional(),
     url: z.string().optional(),
+    genre: z.string().optional(),
     // imageUrl removed - Strapi schema doesn't support it
   }),
 });
@@ -35,6 +37,7 @@ export function toStrapiGig(gig: Gig, venueId: number): StrapiGig {
       description: gig.description,
       price: gig.price,
       url: gig.url,
+      genre: gig.genre,
       // imageUrl intentionally excluded - Strapi schema doesn't support it
     },
   };

@@ -2,7 +2,6 @@ import express from "express";
 import cron from "node-cron";
 import { env } from "./models/env.js";
 import { logger } from "./utils/logger.js";
-import { BraveSearchAdapter } from "./adapters/BraveSearchRepo/BraveSearchAdapter.js";
 import { PlaywrightAdapter } from "./adapters/ContentScraperRepo/PlaywrightAdapter.js";
 import { GeminiAdapter } from "./adapters/GeminiRepo/GeminiAdapter.js";
 import { StrapiAdapter } from "./adapters/StrapiRepo/StrapiAdapter.js";
@@ -12,7 +11,6 @@ const app = express();
 const port = parseInt(env.PORT, 10);
 
 // Initialize adapters
-const searchAdapter = new BraveSearchAdapter();
 const scraperAdapter = new PlaywrightAdapter();
 const llmAdapter = new GeminiAdapter();
 const gigsAdapter = new StrapiAdapter();
@@ -31,7 +29,7 @@ async function syncGigs(options: { clearExisting?: boolean; monthsAhead?: number
   try {
     logger.info({ options }, "Starting gig sync");
 
-    const command = new SyncGigsCommand(searchAdapter, scraperAdapter, llmAdapter, gigsAdapter);
+    const command = new SyncGigsCommand(scraperAdapter, llmAdapter, gigsAdapter);
 
     const stats = await command.execute(options);
     logger.info({ stats }, "Sync completed successfully");
@@ -61,8 +59,9 @@ app.post("/api/sync", (req, res) => {
     }
   }
 
-  // Default to clearing existing data (use ?clear=false to keep old data)
-  const clearExisting = req.query.clear !== "false";
+  // Non-destructive by default: upsert into existing gigs. Pass ?clear=true to
+  // wipe non-manual gigs first (rarely needed; a normal run already refreshes).
+  const clearExisting = req.query.clear === "true";
   const monthsAhead = req.query.monthsAhead
     ? parseInt(req.query.monthsAhead as string, 10)
     : undefined;

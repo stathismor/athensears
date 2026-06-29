@@ -13,14 +13,24 @@ export interface GigsPort {
   createVenue(venue: Venue): Promise<number>;
 
   /**
-   * Check if gig already exists
+   * Check if a gig already exists (matched by title + calendar date).
+   * Returns its identifiers and whether it was hand-edited (manual), so the
+   * caller can update auto gigs while leaving manual ones untouched.
    */
-  findGig(title: string, date: Date): Promise<number | null>;
+  findGig(
+    title: string,
+    date: Date
+  ): Promise<{ id: number; documentId: string; manual: boolean } | null>;
 
   /**
    * Create a new gig
    */
   createGig(gig: Gig, venueId: number): Promise<number>;
+
+  /**
+   * Update an existing gig (by Strapi documentId)
+   */
+  updateGig(documentId: string, gig: Gig, venueId: number): Promise<number>;
 
   /**
    * Get existing venue ID or create new venue

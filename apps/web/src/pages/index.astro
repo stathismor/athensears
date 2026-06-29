@@ -17,6 +17,7 @@ interface Gig {
   price?: string;
   description?: string;
   url?: string;
+  genre?: string;
   venue?: Venue;
 }
 
@@ -27,13 +28,21 @@ interface StrapiResponse {
 let gigs: Gig[] = [];
 let error: string | null = null;
 
-// Use Railway CMS URL in production, localhost in development
-const strapiUrl = import.meta.env.PUBLIC_STRAPI_URL || 'http://localhost:1337';
+// Server-rendered: this runs per request, so gigs stay fresh without a rebuild.
+// Prefer the server-only internal URL (Railway private networking), then the
+// public URL, then localhost for dev.
+const strapiUrl =
+  (typeof process !== 'undefined' && process.env.STRAPI_INTERNAL_URL) ||
+  import.meta.env.PUBLIC_STRAPI_URL ||
+  'http://localhost:1337';
+
+// Cache at the CDN/proxy for 5 minutes so we don't hit Strapi on every request.
+Astro.response.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
 
 try {
   const today = new Date().toISOString().split('T')[0];
   const response = await fetch(
-    `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}&pagination[limit]=100`
+    `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}&pagination[limit]=300`
   );
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
@@ -149,7 +158,14 @@ const gigsByMonth = groupByMonth(gigs);
                                 <span class="text-orange-500 text-sm">{gig.price}</span>
                               ) : null}
                             </div>
-                            <div class="font-medium text-carbon_black-500 mb-1">{gig.title}</div>
+                            <div class="font-medium text-carbon_black-500 mb-1">
+                              {gig.title}
+                              {gig.genre && (
+                                <span class="text-dim_grey-500 text-xs ml-2 uppercase tracking-wide">
+                                  {gig.genre}
+                                </span>
+                              )}
+                            </div>
                             {gig.venue && (
                               <div class="text-dim_grey-500 text-sm">
                                 {gig.venue.website ? (
@@ -175,6 +191,11 @@ const gigsByMonth = groupByMonth(gigs);
                             </div>
                             <div class="flex-1 min-w-0 truncate">
                               <span class="font-medium text-carbon_black-500">{gig.title}</span>
+                              {gig.genre && (
+                                <span class="text-dim_grey-500 text-xs ml-2 uppercase tracking-wide">
+                                  {gig.genre}
+                                </span>
+                              )}
                             </div>
                             <div class="w-56 flex-shrink-0 text-sm text-dim_grey-500 truncate">
                               {gig.venue?.website ? (
@@ -216,9 +237,7 @@ const gigsByMonth = groupByMonth(gigs);
         }
       </main>
 
-      <footer
-        class="mt-16 sm:mt-20 pt-8 border-t border-dim_grey-300/40 text-dim_grey-600 text-sm"
-      >
+      <footer class="mt-16 sm:mt-20 pt-8 border-t border-dim_grey-300/40 text-dim_grey-600 text-sm">
         <p>&copy; {new Date().getFullYear()} Athens Ears</p>
       </footer>
     </div>

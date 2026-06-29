@@ -1,15 +1,30 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { LLMPort } from "../../ports/LLMPort.js";
-import type { SearchResult } from "../../models/searchResult.js";
 import type { ScrapedContent } from "../../models/scrapedContent.js";
 import type { Gig } from "../../models/gig.js";
 import { logger } from "../../utils/logger.js";
 import { retry } from "../../utils/retry.js";
 import { parseFlexibleDate } from "../../utils/dateUtils.js";
-import { URL_FILTER_PROMPT } from "../../prompts/urlFilter.js";
 import { GIG_EXTRACTION_BATCH_PROMPT } from "../../prompts/gigExtractionBatch.js";
 import { EVENT_LINK_FILTER_PROMPT } from "../../prompts/eventLinkFilter.js";
 import { env } from "../../models/env.js";
+
+/**
+ * Normalize a genre string and decide whether the gig passes the taste filter.
+ * The extraction prompt is instructed to set genre to "reject" for events that
+ * don't fit (mainstream pop, EDM, comedy, theatre, tribute acts, etc.). This is
+ * the code-side backstop: drop anything rejected or with no genre at all.
+ */
+function normalizeGenre(raw: string | undefined): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed || /^(reject|skip|none|n\/a)$/i.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
 
 function normalizePrice(raw: string | undefined): string | undefined {
   if (!raw) {
@@ -91,47 +106,6 @@ export class GeminiAdapter implements LLMPort {
   constructor(apiKey: string = env.GEMINI_API_KEY, model: string = env.GEMINI_MODEL) {
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = model;
-  }
-
-  async filterPromisingUrls(searchResults: SearchResult[]): Promise<string[]> {
-    return retry(
-      async () => {
-        logger.info({ count: searchResults.length }, "Filtering search results with Gemini");
-
-        const resultsText = searchResults
-          .map((r) => `URL: ${r.url}\nTitle: ${r.title}\nDescription: ${r.description || "N/A"}`)
-          .join("\n\n");
-
-        const model = this.genAI.getGenerativeModel({
-          model: this.model,
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json",
-          },
-        });
-
-        const prompt = URL_FILTER_PROMPT(resultsText);
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
-
-        try {
-          const data = JSON.parse(text);
-          const urls = data.promising_urls || [];
-          logger.info({ count: urls.length }, "Filtered to promising URLs");
-          return urls;
-        } catch (error) {
-          logger.error({ error, text }, "Failed to parse Gemini response");
-          return [];
-        }
-      },
-      {
-        maxAttempts: 3,
-        onError: (error, attempt) => {
-          logger.warn({ error, attempt }, "Gemini filter attempt failed");
-        },
-      }
-    );
   }
 
   async extractGigsFromMultiplePages(
@@ -287,6 +261,16 @@ export class GeminiAdapter implements LLMPort {
                 }
               }
 
+              // Taste backstop: drop anything the model rejected or left ungenred
+              const genre = normalizeGenre(gigData.genre);
+              if (!genre) {
+                logger.debug(
+                  { title: gigData.title, rawGenre: gigData.genre },
+                  "Skipping gig that failed the genre/taste filter"
+                );
+                continue;
+              }
+
               gigs.push({
                 title: gigData.title,
                 date,
@@ -294,6 +278,7 @@ export class GeminiAdapter implements LLMPort {
                 description: gigData.description,
                 price: normalizePrice(gigData.price),
                 url: normalizeUrl(gigData.url) || normalizeUrl(gigData.ticket_url) || "",
+                genre,
                 imageUrl: gigData.image_url,
               });
             } catch (error) {
