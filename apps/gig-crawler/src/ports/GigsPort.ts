@@ -48,4 +48,10 @@ export interface GigsPort {
    * Delete all gigs
    */
   deleteAllGigs(): Promise<number>;
+
+  /**
+   * Prune stale auto gigs: delete non-manual, future-dated gigs whose `updatedAt`
+   * is older than `notSeenSince` (i.e. not seen by recent crawls). Returns the count.
+   */
+  pruneStaleGigs(notSeenSince: Date): Promise<number>;
 }

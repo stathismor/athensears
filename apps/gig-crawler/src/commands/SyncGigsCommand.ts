@@ -15,6 +15,7 @@ export interface SyncStats {
   gigsCreated: number;
   gigsUpdated: number;
   gigsSkippedManual: number;
+  gigsPruned: number;
   errors: number;
 }
 
@@ -56,6 +57,7 @@ export class SyncGigsCommand {
       gigsCreated: 0,
       gigsUpdated: 0,
       gigsSkippedManual: 0,
+      gigsPruned: 0,
       errors: 0,
     };
 
@@ -148,6 +150,18 @@ export class SyncGigsCommand {
         } catch (error) {
           logger.error({ gig: gig.title, error }, "Failed to store gig");
           stats.errors++;
+        }
+      }
+
+      // Debounced prune: drop future, non-manual gigs not seen (updated) in the last
+      // SYNC_PRUNE_GRACE_DAYS, so cancelled/removed gigs age out. Skipped entirely when
+      // this run stored nothing — a failed scrape must never wipe the site.
+      if (env.SYNC_PRUNE_GRACE_DAYS > 0 && stats.gigsCreated + stats.gigsUpdated > 0) {
+        const cutoff = new Date(now.getTime() - env.SYNC_PRUNE_GRACE_DAYS * 86_400_000);
+        try {
+          stats.gigsPruned = await this.gigs.pruneStaleGigs(cutoff);
+        } catch (error) {
+          logger.error({ error }, "Prune step failed (non-fatal)");
         }
       }
 

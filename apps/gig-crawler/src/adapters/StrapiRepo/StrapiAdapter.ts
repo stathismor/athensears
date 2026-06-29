@@ -253,6 +253,41 @@ export class StrapiAdapter implements GigsPort {
     return await this.createVenue(venue);
   }
 
+  async pruneStaleGigs(notSeenSince: Date): Promise<number> {
+    const today = new Date().toISOString().slice(0, 10);
+    let deleted = 0;
+
+    // Re-query from page 1 each pass (deletions shift pagination); guard caps the loop.
+    for (let guard = 0; guard < 100; guard++) {
+      const response = await this.client.get("/api/gigs", {
+        params: {
+          "filters[manual][$ne]": true,
+          "filters[date][$gte]": `${today}T00:00:00.000Z`,
+          "filters[updatedAt][$lt]": notSeenSince.toISOString(),
+          "pagination[pageSize]": 50,
+        },
+      });
+      const data = response.data;
+      const gigs = Array.isArray(data.data) ? data.data : [];
+      if (gigs.length === 0) {
+        break;
+      }
+      for (const gig of gigs) {
+        try {
+          await this.client.delete(`/api/gigs/${gig.documentId}`);
+          logger.info({ title: gig.title, date: gig.date }, "Pruned stale gig (not seen recently)");
+          deleted++;
+        } catch (error) {
+          logger.warn({ id: gig.id, documentId: gig.documentId, error }, "Failed to prune gig");
+          return deleted; // stop on delete failure to avoid spinning
+        }
+      }
+    }
+
+    logger.info({ deleted, notSeenSince: notSeenSince.toISOString() }, "Pruned stale gigs");
+    return deleted;
+  }
+
   async deleteAllGigs(): Promise<number> {
     return retry(
       async () => {

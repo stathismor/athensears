@@ -36,6 +36,11 @@ export const EnvSchema = z.object({
   // Sync
   SYNC_MONTHS_AHEAD: z.coerce.number().default(3),
 
+  // Prune auto gigs not seen (updated) by a crawl in this many days. Acts as a
+  // debounce: a gig must be missed by this many consecutive runs before removal,
+  // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.
+  SYNC_PRUNE_GRACE_DAYS: z.coerce.number().default(3),
+
   // Logging
   LOG_LEVEL: z.string().default("info"),
 });
