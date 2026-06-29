@@ -14,6 +14,7 @@ KEEP events whose music clearly fits one of these (set "genre" to the closest ma
 - Synth, Electronic-experimental, IDM, Krautrock, Ambient, Drone
 - Modern/Contemporary Classical, Minimalism
 - Jazz, Free Jazz, Folk, Singer-songwriter, Psych, Prog
+- Reggae, Dub, Ska, World/roots — when played live by a band (NOT club DJ nights)
 
 REJECT (do NOT include — set "genre" to "reject" or simply omit the event):
 - Mainstream / commercial pop (Greek or international)
@@ -32,7 +33,7 @@ Extract all upcoming music events from ALL the pages below that match the genre 
 - **title** (required): Name of the event, band/artist name, or concert title
 - **date** (required): Event date and time in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
 - **venue_name** (required): Name of the venue where the event takes place
-- **genre** (required): The single closest genre from the KEEP list above (e.g. "Post-rock", "Indie Rock", "Metal", "Jazz"). If the event does NOT fit the KEEP list, set this to "reject" (the event will be discarded)
+- **genre** (required): The act's TRUE genre, as the single closest match from the KEEP list above (e.g. "Post-rock", "Indie Rock", "Metal", "Jazz", "Reggae"). Label accurately — do NOT shoehorn an act into an unrelated bucket (e.g. a reggae/dub act is "Reggae", never "Folk"). If the event does NOT fit the KEEP list, set this to "reject" (the event will be discarded)
 - **description** (optional): Event description, supporting acts, or additional details
 - **price** (required): Ticket price. Return ONLY the minimum/starting price as a single value "€X" (e.g. "€15"). If multiple prices are listed (e.g. "€16, 18€, 20€"), return only the lowest one as "€16". Never return a list or comma-separated prices. Use:
   - "€X" for a specific price

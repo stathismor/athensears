@@ -1,35 +1,55 @@
+/**
+ * Parse a gig date into a Date anchored at **noon UTC of the intended calendar day**.
+ *
+ * Gigs are calendar-day events (the time of day lives in `time_display`). Anchoring at
+ * noon UTC keeps the day stable through `toISOString()` storage, range filtering,
+ * `findGig` matching, and frontend `getDate()` rendering, regardless of server timezone.
+ * The previous implementation built dates at *local* midnight (`new Date(y, m, d)`),
+ * which serialized back a day in any positive-offset timezone (e.g. Athens UTC+3).
+ */
 export function parseFlexibleDate(dateStr: string): Date | null {
   if (!dateStr) {
     return null;
   }
+  const s = dateStr.trim();
 
-  // Try ISO format
-  const isoDate = new Date(dateStr);
-  if (!isNaN(isoDate.getTime())) {
-    return isoDate;
-  }
+  let y: number | undefined;
+  let mo: number | undefined;
+  let d: number | undefined;
 
-  // Try common formats
-  const formats = [
-    /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
-    /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
-    /^(\d{2})-(\d{2})-(\d{4})$/, // DD-MM-YYYY
-  ];
-
-  for (const format of formats) {
-    const match = dateStr.match(format);
-    if (match) {
-      if (format.source.startsWith("^(\\d{4})")) {
-        // YYYY-MM-DD
-        return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
-      } else {
-        // DD/MM/YYYY or DD-MM-YYYY
-        return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
-      }
+  // ISO date / datetime: take the literal Y-M-D (ignore any time/zone)
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+  if (m) {
+    y = parseInt(m[1], 10);
+    mo = parseInt(m[2], 10);
+    d = parseInt(m[3], 10);
+  } else {
+    // DD/MM/YYYY or DD-MM-YYYY (Greek pages use day-first)
+    m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (m) {
+      d = parseInt(m[1], 10);
+      mo = parseInt(m[2], 10);
+      y = parseInt(m[3], 10);
     }
   }
 
-  return null;
+  // Last resort: let Date parse it, then take its UTC calendar day
+  if (y === undefined || mo === undefined || d === undefined) {
+    const parsed = new Date(s);
+    if (isNaN(parsed.getTime())) {
+      return null;
+    }
+    y = parsed.getUTCFullYear();
+    mo = parsed.getUTCMonth() + 1;
+    d = parsed.getUTCDate();
+  }
+
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) {
+    return null;
+  }
+
+  const result = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
+  return isNaN(result.getTime()) ? null : result;
 }
 
 export function getDateRangeQuery(daysAhead: number = 30): string {
