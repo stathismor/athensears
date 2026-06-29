@@ -197,6 +197,47 @@ export class StrapiAdapter implements GigsPort {
     );
   }
 
+  async upsertVenue(venue: Venue): Promise<number> {
+    return retry(
+      async () => {
+        const findRes = await this.client.get("/api/venues", {
+          params: { "filters[name][$eqi]": venue.name },
+        });
+        const parsed = StrapiVenueResponseSchema.parse(findRes.data);
+        const existing = Array.isArray(parsed.data) ? parsed.data[0] : undefined;
+
+        if (existing) {
+          // Patch metadata only (don't clobber the name); omit undefined fields
+          await this.client.put(`/api/venues/${existing.documentId}`, {
+            data: {
+              website: venue.website,
+              neighborhood: venue.neighborhood,
+              address: venue.address,
+            },
+          });
+          this.venueCache.set(venue.name.toLowerCase(), existing.id);
+          logger.info({ name: venue.name, id: existing.id }, "Updated venue metadata");
+          return existing.id;
+        }
+
+        const created = await this.client.post("/api/venues", toStrapiVenue(venue));
+        const cp = StrapiVenueResponseSchema.parse(created.data);
+        if (cp.data && !Array.isArray(cp.data)) {
+          this.venueCache.set(venue.name.toLowerCase(), cp.data.id);
+          logger.info({ name: venue.name, id: cp.data.id }, "Created venue (seed)");
+          return cp.data.id;
+        }
+        throw new Error("Failed to upsert venue: unexpected response format");
+      },
+      {
+        maxAttempts: 3,
+        onError: (error, attempt) => {
+          logger.warn({ error, attempt, venue: venue.name }, "Upsert venue attempt failed");
+        },
+      }
+    );
+  }
+
   async getOrCreateVenue(venueName: string): Promise<number> {
     const canonicalName = normalizeVenueName(venueName);
     if (canonicalName !== venueName) {

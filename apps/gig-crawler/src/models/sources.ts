@@ -88,6 +88,18 @@ export const GIG_SOURCES: GigSource[] = [
     website: "https://www.floyd.gr",
     listingUrls: ["https://www.floyd.gr/events/category/concerts/"],
   },
+  {
+    // Major Athens summer festival at Plateia Nerou. Clean per-event detail pages
+    // (/event/<slug>/), verified scrapeable over HTTP 2026-06-29. Aggregators list
+    // these as "Plateia Nerou" — aliased to "Release Athens" so the copies merge.
+    id: "release-athens",
+    name: "Release Athens (Plateia Nerou)",
+    type: "venue",
+    venueName: "Release Athens",
+    neighborhood: "Palaio Faliro",
+    website: "https://www.releaseathens.gr",
+    listingUrls: ["https://www.releaseathens.gr/en/"],
+  },
 
   // ───────── Venues with no usable official page — verified via aggregator ─────────
   // listingUrl is a venue-scoped aggregator page; venueName is stamped so the venue

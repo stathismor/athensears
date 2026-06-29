@@ -4,10 +4,10 @@
  */
 const VENUE_ALIASES: Record<string, string> = {
   // Gagarin
-  "gagarin205": "Gagarin 205",
+  gagarin205: "Gagarin 205",
   "gagarin 205": "Gagarin 205",
   "gagarin live music space": "Gagarin 205",
-  "gagarin": "Gagarin 205",
+  gagarin: "Gagarin 205",
 
   // An Club
   "an club": "AN Club",
@@ -20,23 +20,23 @@ const VENUE_ALIASES: Record<string, string> = {
   "six d.o.g.s.": "Six Dogs",
 
   // Fuzz Club
-  "fuzz": "Fuzz Club",
+  fuzz: "Fuzz Club",
   "fuzz club": "Fuzz Club",
   "fuzz live music club": "Fuzz Club",
 
   // Death Disco
   "death disco": "Death Disco",
-  "deathdisco": "Death Disco",
+  deathdisco: "Death Disco",
 
   // Temple
   "temple athens": "Temple",
-  "temple": "Temple",
+  temple: "Temple",
   "temple live": "Temple",
 
   // Kyttaro
-  "kyttaro": "Kyttaro",
+  kyttaro: "Kyttaro",
   "kyttaro live": "Kyttaro",
-  "κύτταρο": "Kyttaro",
+  κύτταρο: "Kyttaro",
 
   // Piraeus 117 Academy
   "piraeus 117 academy": "Piraeus 117 Academy",
@@ -49,17 +49,24 @@ const VENUE_ALIASES: Record<string, string> = {
   "ιλιον plus": "Ilion Plus",
 
   // Romantso
-  "romantso": "Romantso",
-  "ρομάντσο": "Romantso",
+  romantso: "Romantso",
+  ρομάντσο: "Romantso",
 
   // Bios
-  "bios": "Bios",
+  bios: "Bios",
   "β|ος": "Bios",
 
   // Gazarte
-  "gazarte": "Gazarte",
+  gazarte: "Gazarte",
   "gazarte main stage": "Gazarte",
   "gazarte roof stage": "Gazarte",
+
+  // Release Athens festival (at Plateia Nerou, Palaio Faliro)
+  "plateia nerou": "Release Athens",
+  "πλατεία νερού": "Release Athens",
+  "πλατεια νερου": "Release Athens",
+  "release athens": "Release Athens",
+  "release athens festival": "Release Athens",
 };
 
 /**

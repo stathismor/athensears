@@ -13,6 +13,13 @@ export interface GigsPort {
   createVenue(venue: Venue): Promise<number>;
 
   /**
+   * Create the venue, or update its metadata (website/neighborhood/address) if it
+   * already exists. Used to seed curated venues from the source registry so the
+   * site can link them.
+   */
+  upsertVenue(venue: Venue): Promise<number>;
+
+  /**
    * Check if a gig already exists (matched by title + calendar date).
    * Returns its identifiers and whether it was hand-edited (manual), so the
    * caller can update auto gigs while leaving manual ones untouched.

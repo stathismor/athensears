@@ -4,6 +4,7 @@ export const VenueSchema = z.object({
   name: z.string(),
   address: z.string().optional(),
   website: z.string().optional(),
+  neighborhood: z.string().optional(),
 });
 
 export type Venue = z.infer<typeof VenueSchema>;
@@ -13,6 +14,7 @@ export const StrapiVenueSchema = z.object({
     name: z.string(),
     address: z.string().optional(),
     website: z.string().optional(),
+    neighborhood: z.string().optional(),
   }),
 });
 
@@ -24,6 +26,7 @@ export function toStrapiVenue(venue: Venue): StrapiVenue {
       name: venue.name,
       address: venue.address,
       website: venue.website,
+      neighborhood: venue.neighborhood,
     },
   };
 }

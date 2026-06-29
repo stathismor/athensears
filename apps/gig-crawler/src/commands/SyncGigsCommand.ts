@@ -80,6 +80,22 @@ export class SyncGigsCommand {
         return stats;
       }
 
+      // Seed/refresh curated venue metadata (website, neighborhood) from the registry
+      // so the site can link venues. (Aggregator-only venues are created name-only later.)
+      for (const s of sources) {
+        if (s.type === "venue" && s.venueName) {
+          try {
+            await this.gigs.upsertVenue({
+              name: s.venueName,
+              website: s.website,
+              neighborhood: s.neighborhood,
+            });
+          } catch (error) {
+            logger.warn({ source: s.id, error }, "Failed to seed venue metadata");
+          }
+        }
+      }
+
       // Collect gigs source by source (so we can stamp the known venue per source)
       const allGigs: Gig[] = [];
       for (const source of sources) {
@@ -101,12 +117,13 @@ export class SyncGigsCommand {
         return stats;
       }
 
-      // Keep gigs whose ticket URL is broken — just drop the dead link (frontend
-      // falls back to the venue website). Never discard the gig itself.
-      const validatedGigs = await this.validateUrls(allGigs);
+      // Note: we deliberately do NOT pre-validate event URLs with HEAD requests.
+      // Ticketing/aggregator sites reject or stall HEAD (timeouts), which silently
+      // dropped most valid event links. The URLs come from pages we just scraped, so
+      // we trust them; the occasional dead link is fixable in the CMS.
 
       // Upsert into the CMS
-      for (const gig of validatedGigs) {
+      for (const gig of allGigs) {
         try {
           const existing = await this.gigs.findGig(gig.title, gig.date);
 
@@ -227,34 +244,5 @@ export class SyncGigsCommand {
     }
 
     return gigs;
-  }
-
-  /** HEAD-check ticket URLs in parallel; clear dead ones but keep the gig. */
-  private async validateUrls(gigs: Gig[]): Promise<Gig[]> {
-    const validated = await Promise.all(
-      gigs.map(async (gig) => {
-        if (!gig.url) {
-          return gig;
-        }
-        try {
-          const res = await fetch(gig.url, {
-            method: "HEAD",
-            redirect: "follow",
-            signal: AbortSignal.timeout(5000),
-          });
-          if (res.ok) {
-            return gig;
-          }
-          logger.warn(
-            { title: gig.title, url: gig.url, status: res.status },
-            "Clearing broken gig URL"
-          );
-        } catch {
-          logger.warn({ title: gig.title, url: gig.url }, "Clearing unreachable gig URL");
-        }
-        return { ...gig, url: undefined };
-      })
-    );
-    return validated;
   }
 }
