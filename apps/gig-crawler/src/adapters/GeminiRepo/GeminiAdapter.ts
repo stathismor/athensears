@@ -121,10 +121,8 @@ export class GeminiAdapter implements LLMPort {
 
     logger.info({ totalPages: successfulPages.length }, "Starting batch extraction with chunking");
 
-    // Chunk pages into smaller batches to avoid overwhelming the API
+    // Chunk pages into smaller batches to keep each prompt a reasonable size
     const CHUNK_SIZE = env.GEMINI_CHUNK_SIZE;
-    const DELAY_BETWEEN_CHUNKS_MS =
-      env.GEMINI_RATE_LIMIT_RPM > 0 ? Math.ceil(60000 / env.GEMINI_RATE_LIMIT_RPM) : 0;
     const chunks: ScrapedContent[][] = [];
     for (let i = 0; i < successfulPages.length; i += CHUNK_SIZE) {
       chunks.push(successfulPages.slice(i, i + CHUNK_SIZE));
@@ -132,51 +130,28 @@ export class GeminiAdapter implements LLMPort {
 
     logger.info(
       { totalPages: successfulPages.length, chunks: chunks.length, chunkSize: CHUNK_SIZE },
-      "Split into chunks"
+      "Split into chunks (extracting in parallel)"
     );
 
-    // Process each chunk with delay between chunks
-    const allGigs: Gig[] = [];
-    let failedChunks = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      logger.info(
-        { chunkIndex: i + 1, totalChunks: chunks.length, pagesInChunk: chunk.length },
-        "Processing chunk"
-      );
-
-      try {
-        const gigsFromChunk = await this.extractGigsFromChunk(chunk, dateRange);
-        allGigs.push(...gigsFromChunk);
-
-        logger.info(
-          { chunkIndex: i + 1, gigsExtracted: gigsFromChunk.length, totalSoFar: allGigs.length },
-          "Chunk processed successfully"
-        );
-      } catch (error) {
-        failedChunks++;
-        logger.error(
-          { chunkIndex: i + 1, error, failedChunks },
-          "Chunk processing failed, continuing with next chunk"
-        );
-      }
-
-      // Add delay between chunks to avoid rate limiting (except after last chunk)
-      if (i < chunks.length - 1) {
-        logger.info(
-          { delayMs: DELAY_BETWEEN_CHUNKS_MS },
-          "Waiting before next chunk to avoid rate limits"
-        );
-        await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_CHUNKS_MS));
-      }
-    }
-
-    if (failedChunks > 0) {
-      logger.warn(
-        { failedChunks, totalChunks: chunks.length, successfulGigs: allGigs.length },
-        "Some chunks failed but continuing with extracted gigs"
-      );
-    }
+    // Extract all chunks in parallel. The per-call retry/backoff handles transient
+    // 429s and the key has ample RPM headroom, so we don't serialize with delays.
+    // A failed chunk contributes no gigs but never aborts the others.
+    const chunkResults = await Promise.all(
+      chunks.map(async (chunk, i) => {
+        try {
+          const gigsFromChunk = await this.extractGigsFromChunk(chunk, dateRange);
+          logger.info(
+            { chunkIndex: i + 1, totalChunks: chunks.length, gigsExtracted: gigsFromChunk.length },
+            "Chunk processed successfully"
+          );
+          return gigsFromChunk;
+        } catch (error) {
+          logger.error({ chunkIndex: i + 1, error }, "Chunk processing failed");
+          return [] as Gig[];
+        }
+      })
+    );
+    const allGigs = chunkResults.flat();
 
     logger.info(
       { totalGigs: allGigs.length, totalPages: successfulPages.length },
