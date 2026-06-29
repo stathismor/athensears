@@ -45,7 +45,8 @@ services:
     ports:
       - '1337:1337'
     volumes:
-      - ./apps/cms/public/uploads:/app/apps/cms/public/uploads
+      - ./apps/cms:/app/apps/cms
+      - /app/apps/cms/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +67,9 @@ services:
       LOG_LEVEL: debug
     ports:
       - '3000:3000'
+    volumes:
+      - ./apps/gig-crawler:/app/apps/gig-crawler
+      - /app/apps/gig-crawler/node_modules
     depends_on:
       - cms
 

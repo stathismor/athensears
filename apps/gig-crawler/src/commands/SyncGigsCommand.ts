@@ -117,8 +117,8 @@ export class SyncGigsCommand {
       // Step 2: Filter promising URLs with Gemini
       const promisingUrls = await this.llm.filterPromisingUrls(searchResults);
       const hardcodedUrls = [
-        "https://www.more.com/music/concerts/",
-        "https://www.more.com/gr-el/tickets/music/",
+        "https://www.ticketservices.gr/en/LiveConcerts/",
+        "https://www.athinorama.gr/concerts/",
       ];
       for (const url of hardcodedUrls) {
         if (!promisingUrls.includes(url)) {
@@ -240,8 +240,42 @@ export class SyncGigsCommand {
         return stats;
       }
 
-      // Step 5: Store gigs in Strapi (with deduplication)
+      // Step 5: Validate gig URLs (lightweight HEAD requests)
+      logger.info("Validating gig URLs...");
+      const validatedGigs: Gig[] = [];
       for (const gig of allGigs) {
+        if (gig.url) {
+          try {
+            const res = await fetch(gig.url, {
+              method: "HEAD",
+              redirect: "follow",
+              signal: AbortSignal.timeout(5000),
+            });
+            if (res.ok) {
+              validatedGigs.push(gig);
+            } else {
+              logger.warn(
+                { title: gig.title, url: gig.url, status: res.status },
+                "Dropping gig with broken URL"
+              );
+            }
+          } catch {
+            logger.warn(
+              { title: gig.title, url: gig.url },
+              "Dropping gig with unreachable URL"
+            );
+          }
+        } else {
+          validatedGigs.push(gig);
+        }
+      }
+      logger.info(
+        { before: allGigs.length, after: validatedGigs.length },
+        "URL validation complete"
+      );
+
+      // Step 6: Store gigs in Strapi (with deduplication)
+      for (const gig of validatedGigs) {
         try {
           // Check if gig already exists
           const existingGigId = await this.gigs.findGig(gig.title, gig.date);

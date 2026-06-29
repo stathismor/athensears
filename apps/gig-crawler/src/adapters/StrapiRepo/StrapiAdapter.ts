@@ -8,6 +8,7 @@ import { StrapiVenueResponseSchema, StrapiGigResponseSchema } from "../../models
 import { logger } from "../../utils/logger.js";
 import { retry } from "../../utils/retry.js";
 import { env } from "../../models/env.js";
+import { normalizeVenueName } from "../../models/venueAliases.js";
 
 export class StrapiAdapter implements GigsPort {
   private readonly client: AxiosInstance;
@@ -167,12 +168,17 @@ export class StrapiAdapter implements GigsPort {
   }
 
   async getOrCreateVenue(venueName: string): Promise<number> {
-    const existing = await this.findVenueByName(venueName);
+    const canonicalName = normalizeVenueName(venueName);
+    if (canonicalName !== venueName) {
+      logger.info({ original: venueName, canonical: canonicalName }, "Normalized venue name");
+    }
+
+    const existing = await this.findVenueByName(canonicalName);
     if (existing) {
       return existing.id;
     }
 
-    const venue: Venue = { name: venueName };
+    const venue: Venue = { name: canonicalName };
     return await this.createVenue(venue);
   }
 

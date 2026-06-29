@@ -4,22 +4,28 @@ export const URL_FILTER_PROMPT = (
 
 Below are search results from a web search. Your task is to filter these results and identify the most promising URLs that are likely to contain information about upcoming live music events in Athens.
 
-**IMPORTANT - Genre Focus:**
-We are ONLY interested in these genres:
-- Rock, Metal, Indie, Alternative
-- Folk, Post-rock, Shoegaze
-- Dark, Goth, Post-punk
-- Experimental, Noise, Ambient
+**IMPORTANT - Genre & Taste Focus:**
+We are interested in INDIE/CRITICAL music taste — artists reviewed on Pitchfork, Bandcamp, The Quietus, KEXP, NPR Music, Drowned in Sound, etc.
 
-EXCLUDE these genres:
-- Pop (Greek or international)
-- Dance, Techno, House, Rave
+ONLY interested in these genres:
+- Rock, Indie Rock, Indie Electronic, Alternative
+- Post-rock, Shoegaze
+- Synth, Electronic, IDM, Experimental
+- Ambient, Noise, Dark, Goth, Post-punk, Industrial
+- Modern Classical, Minimalism, Contemporary Classical
+- Jazz, Folk, Krautrock
+
+EXCLUDE these genres and sources:
+- Mainstream Pop (Greek, international)
+- Dance, Techno, House, EDM, Rave
 - Hip-hop, Trap, Rap
-- Greek popular music (λαϊκά, έντεχνο)
+- Mainstream Metal
 - Mainstream/commercial events
+- Greek popular music (λαϊκά, έντεχνο)
+- Mainstream music news sites (e.g., metalwar.gr, blabbermouth.net)
 
 **Selection Criteria (prioritize in this order):**
-1. **Greek event sites** (e.g., viva.gr, more.com, ticketservices.gr, Athens Voice, lifo.gr, rocking.gr)
+1. **Greek event sites** (e.g., ticketservices.gr, athinorama.gr, Athens Voice, lifo.gr, rocking.gr)
 2. **Venue websites** from Athens rock/indie/alternative music venues with upcoming shows
 3. **Event calendars** or "what's on" pages focused on alternative music
 4. **Athens music blogs** or news sites with rock/indie event listings
@@ -32,6 +38,7 @@ EXCLUDE these genres:
 - URLs about past events
 - Non-Athens or non-Greece locations
 - Pop, dance, or mainstream music venues/events
+- Music news/blog sites covering international events (e.g., metalwar.gr, blabbermouth.net) — these publish news articles about worldwide events, not Athens-specific listings
 
 **Diversity:** Try to select URLs from different sources to maximize variety of events found.
 

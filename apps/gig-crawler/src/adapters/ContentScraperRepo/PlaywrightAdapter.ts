@@ -170,6 +170,34 @@ export class PlaywrightAdapter implements ScraperPort {
 
       logger.info({ url, linkCount: links.length }, "Extracted links");
 
+      // Extract external ticket links via Playwright (Readability often strips these)
+      const ticketLinks = await page.$$eval(
+        "a[href]",
+        (anchors, baseUrl) => {
+          const ticketDomains = ["more.com", "viva.gr", "ticketservices.gr", "ticketmaster.gr", "eventbrite.com"];
+          const ticketKeywords = ["ticket", "buy", "αγορ", "εισιτ", "biliet"];
+          const results: string[] = [];
+          for (const a of anchors) {
+            const href = a.getAttribute("href");
+            if (!href) continue;
+            try {
+              const abs = new URL(href, baseUrl).toString();
+              const hostname = new URL(abs).hostname;
+              const text = (a.textContent || "").toLowerCase();
+              const isTicketDomain = ticketDomains.some((d) => hostname.includes(d));
+              const isTicketText = ticketKeywords.some((k) => text.includes(k) || href.toLowerCase().includes(k));
+              if (isTicketDomain || isTicketText) {
+                results.push(`${a.textContent?.trim() || "Ticket"}: ${abs}`);
+              }
+            } catch {
+              // skip invalid URLs
+            }
+          }
+          return results;
+        },
+        url
+      );
+
       // Extract structured data (JSON-LD, OpenGraph) before Readability
       const structuredData = extractStructuredData(html);
 
@@ -191,9 +219,12 @@ export class PlaywrightAdapter implements ScraperPort {
           .replace(/\s+/g, " ")
           .trim();
         // Prepend structured data so the LLM always sees event metadata
+        const ticketSection = ticketLinks.length > 0
+          ? `\n\n[Ticket Links]\n${ticketLinks.join("\n")}`
+          : "";
         const text = structuredData
-          ? `[Structured Data]\n${structuredData}\n\n[Page Content]\n${textWithLinks}`
-          : textWithLinks;
+          ? `[Structured Data]\n${structuredData}\n\n[Page Content]\n${textWithLinks}${ticketSection}`
+          : `${textWithLinks}${ticketSection}`;
         logger.info(
           { url, textLength: text.length, hasStructuredData: !!structuredData },
           "Extracted text"

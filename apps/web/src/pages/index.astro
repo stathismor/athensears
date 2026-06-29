@@ -94,7 +94,7 @@ const gigsByMonth = groupByMonth(gigs);
     <title>Athens Ears - Gigs in Athens</title>
   </head>
   <body class="bg-white text-carbon_black-500 min-h-screen">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    <div class="max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       <header class="mb-10 sm:mb-14">
         <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-carbon_black-500">
           Athens Ears
@@ -129,7 +129,7 @@ const gigsByMonth = groupByMonth(gigs);
                     {monthGigs.map((gig) => {
                       const { weekday, day } = formatDate(gig.date);
                       return (
-                        <li class="py-4 sm:py-5 hover:bg-white-700/30 -mx-3 px-3 rounded-lg transition-colors">
+                        <li class="py-1 sm:py-1.5 hover:bg-white-700/30 -mx-3 px-3 transition-colors">
                           {/* Mobile layout */}
                           <div class="sm:hidden font-mono">
                             <div class="flex items-center justify-between mb-1">
@@ -173,10 +173,10 @@ const gigsByMonth = groupByMonth(gigs);
                             <div class="w-24 flex-shrink-0 text-dim_grey-500 text-sm">
                               {weekday} {day}
                             </div>
-                            <div class="flex-1 min-w-0">
+                            <div class="flex-1 min-w-0 truncate">
                               <span class="font-medium text-carbon_black-500">{gig.title}</span>
                             </div>
-                            <div class="w-44 flex-shrink-0 text-sm text-dim_grey-500 truncate">
+                            <div class="w-56 flex-shrink-0 text-sm text-dim_grey-500 truncate">
                               {gig.venue?.website ? (
                                 <a
                                   href={gig.venue.website}
