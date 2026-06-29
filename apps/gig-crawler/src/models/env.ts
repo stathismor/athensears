@@ -36,6 +36,11 @@ export const EnvSchema = z.object({
   // Sync
   SYNC_MONTHS_AHEAD: z.coerce.number().default(3),
 
+  // How many registry sources to crawl in parallel (each still scrapes its own
+  // pages with SCRAPER_CONCURRENCY). Higher = faster runs, more concurrent browser
+  // pages + LLM calls.
+  SYNC_SOURCE_CONCURRENCY: z.coerce.number().default(4),
+
   // Prune auto gigs not seen (updated) by a crawl in this many days. Acts as a
   // debounce: a gig must be missed by this many consecutive runs before removal,
   // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.

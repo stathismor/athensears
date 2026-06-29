@@ -22,6 +22,66 @@ export interface SyncStats {
 /** Cap detail pages crawled per source — keeps cost bounded and diversifies coverage. */
 const MAX_DETAIL_PAGES_PER_SOURCE = 30;
 
+/** Generic tokens that shouldn't drive event-URL matching. */
+const TITLE_STOPWORDS = new Set([
+  "live",
+  "tour",
+  "athens",
+  "athina",
+  "fest",
+  "festival",
+  "show",
+  "concert",
+  "band",
+  "with",
+  "feat",
+  "night",
+  "stage",
+  "music",
+  "greece",
+  "plus",
+  "special",
+  "guest",
+  "guests",
+  "presents",
+  "2025",
+  "2026",
+  "2027",
+]);
+
+/** Normalize a title for fuzzy dedup: lowercase, strip punctuation/separators, collapse spaces. */
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/**
+ * Pick the candidate URL whose slug shares the most significant title tokens — used to
+ * upgrade a listing-page gig to its specific event link. Returns undefined if no
+ * confident match (so we drop a useless generic link rather than guess).
+ */
+function matchEventUrl(title: string, urls: string[]): string | undefined {
+  const tokens = (title.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    (t) => t.length >= 4 && !TITLE_STOPWORDS.has(t)
+  );
+  if (tokens.length === 0) {
+    return undefined;
+  }
+  let best: string | undefined;
+  let bestScore = 0;
+  for (const url of urls) {
+    const slug = url.toLowerCase();
+    const score = tokens.filter((t) => slug.includes(t)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = url;
+    }
+  }
+  return bestScore >= 1 ? best : undefined;
+}
+
 /**
  * Walks the curated source registry every run:
  *   Pass A — scrape each source's listing page(s) and discover event-detail URLs.
@@ -98,23 +158,40 @@ export class SyncGigsCommand {
         }
       }
 
-      // Collect gigs source by source (so we can stamp the known venue per source)
+      // Collect gigs from sources in parallel (each stamps its own venue). A worker
+      // pool bounds how many sources scrape/extract at once.
       const allGigs: Gig[] = [];
-      for (const source of sources) {
-        try {
-          const sourceGigs = await this.collectFromSource(source, dateRange, stats);
-          logger.info({ source: source.id, gigs: sourceGigs.length }, "Collected gigs from source");
-          allGigs.push(...sourceGigs);
-        } catch (error) {
-          logger.error({ source: source.id, error }, "Failed to collect from source");
-          stats.errors++;
+      let nextSource = 0;
+      const collectWorker = async () => {
+        while (nextSource < sources.length) {
+          const source = sources[nextSource++];
+          try {
+            const sourceGigs = await this.collectFromSource(source, dateRange, stats);
+            logger.info(
+              { source: source.id, gigs: sourceGigs.length },
+              "Collected gigs from source"
+            );
+            allGigs.push(...sourceGigs);
+          } catch (error) {
+            logger.error({ source: source.id, error }, "Failed to collect from source");
+            stats.errors++;
+          }
         }
-      }
+      };
+      const sourceConcurrency = Math.max(1, env.SYNC_SOURCE_CONCURRENCY);
+      await Promise.all(
+        Array.from({ length: Math.min(sourceConcurrency, sources.length) }, () => collectWorker())
+      );
 
-      stats.gigsExtracted = allGigs.length;
-      logger.info({ count: allGigs.length }, "Extracted total gigs across all sources");
+      // Collapse cross-source duplicates (same event listed by venue + aggregators)
+      const dedupedGigs = this.dedupeGigs(allGigs, sources);
+      stats.gigsExtracted = dedupedGigs.length;
+      logger.info(
+        { raw: allGigs.length, deduped: dedupedGigs.length },
+        "Extracted gigs across all sources (deduped)"
+      );
 
-      if (allGigs.length === 0) {
+      if (dedupedGigs.length === 0) {
         logger.warn("No gigs extracted, sync complete (existing gigs left untouched)");
         return stats;
       }
@@ -125,7 +202,7 @@ export class SyncGigsCommand {
       // we trust them; the occasional dead link is fixable in the CMS.
 
       // Upsert into the CMS
-      for (const gig of allGigs) {
+      for (const gig of dedupedGigs) {
         try {
           const existing = await this.gigs.findGig(gig.title, gig.date);
 
@@ -175,6 +252,43 @@ export class SyncGigsCommand {
   }
 
   /**
+   * Collapse duplicates of the same event surfaced by multiple sources (e.g. a venue
+   * site + an aggregator) using a punctuation-normalized title + day + venue key.
+   * Keeps the record with the best link (specific event page > generic listing > none)
+   * and backfills missing price/description/genre/image from the discarded copy.
+   */
+  private dedupeGigs(gigs: Gig[], sources: GigSource[]): Gig[] {
+    const listingUrls = new Set(sources.flatMap((s) => s.listingUrls));
+    const urlScore = (url?: string): number => {
+      if (!url) {
+        return 0;
+      }
+      return listingUrls.has(url) ? 1 : 2; // generic listing vs specific event page
+    };
+
+    const byKey = new Map<string, Gig>();
+    for (const gig of gigs) {
+      const key = `${normalizeTitle(gig.title)}|${gig.date.toISOString().slice(0, 10)}|${gig.venueName.toLowerCase()}`;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, gig);
+        continue;
+      }
+      const best = urlScore(gig.url) > urlScore(existing.url) ? gig : existing;
+      const other = best === gig ? existing : gig;
+      byKey.set(key, {
+        ...best,
+        url: best.url || other.url,
+        price: best.price ?? other.price,
+        description: best.description ?? other.description,
+        genre: best.genre ?? other.genre,
+        imageUrl: best.imageUrl ?? other.imageUrl,
+      });
+    }
+    return [...byKey.values()];
+  }
+
+  /**
    * Scrape one source's listing page(s), discover event-detail URLs, scrape those,
    * and extract gigs. For venue sources, stamp the known canonical venue name.
    */
@@ -198,6 +312,20 @@ export class SyncGigsCommand {
         return [];
       }
       let gigs = await this.llm.extractGigsFromMultiplePages(okListings, dateRange);
+
+      // The gig "url" from a listing is the generic listing page. Upgrade it to a
+      // per-event link found among the listing's hrefs (matched by title), or drop it —
+      // a useless category link is worse than none.
+      const candidateLinks = okListings.flatMap((p) => p.links ?? []);
+      const listingUrlSet = new Set(source.listingUrls);
+      gigs = gigs.map((g) => {
+        const isGeneric = !g.url || listingUrlSet.has(g.url);
+        if (!isGeneric) {
+          return g;
+        }
+        return { ...g, url: matchEventUrl(g.title, candidateLinks) };
+      });
+
       if (source.type === "venue" && source.venueName) {
         const venueName = source.venueName;
         gigs = gigs.map((g) => ({ ...g, venueName }));
