@@ -258,12 +258,11 @@ export class PlaywrightAdapter implements ScraperPort {
     const page = await browser.newPage();
 
     try {
-      try {
-        await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-      } catch {
-        logger.warn({ url }, "networkidle failed, retrying with domcontentloaded");
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-      }
+      // Load fast on DOMContentLoaded (our sources are server-rendered), then give
+      // lazy content a brief moment to settle — but cap that at 6s instead of paying
+      // the full 30s networkidle timeout that rarely settles (analytics/ads keep it busy).
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+      await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
 
       const html = await page.content();
       const baseHostname = new URL(url).hostname;

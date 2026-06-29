@@ -24,9 +24,11 @@ export const EnvSchema = z.object({
   // Scraper
   SCRAPER_CONCURRENCY: z.string().default("5"),
 
-  // Gemini rate limiting & chunking
-  GEMINI_RATE_LIMIT_RPM: z.coerce.number().default(15),
-  GEMINI_CHUNK_SIZE: z.coerce.number().default(3),
+  // Gemini rate limiting & chunking. Defaults suit a paid tier (gemini-2.5/flash
+  // allow ~1000 RPM); the inter-chunk delay is 60000/RPM ms. On the free tier,
+  // lower GEMINI_RATE_LIMIT_RPM (~10) — the 429 backoff handles overruns either way.
+  GEMINI_RATE_LIMIT_RPM: z.coerce.number().default(120),
+  GEMINI_CHUNK_SIZE: z.coerce.number().default(6),
 
   // Auth
   SYNC_API_KEY: z.string().optional(),
