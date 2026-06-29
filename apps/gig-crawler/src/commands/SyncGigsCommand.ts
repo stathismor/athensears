@@ -159,6 +159,21 @@ export class SyncGigsCommand {
     const okListings = listingScrapes.filter((s) => s.success);
     stats.listingPagesScraped += okListings.length;
 
+    // listingOnly sources (e.g. more.com, whose detail pages are gated) are
+    // extracted straight from the listing — no detail-page discovery/scraping.
+    if (source.listingOnly) {
+      if (okListings.length === 0) {
+        logger.warn({ source: source.id }, "No listing pages scraped for listing-only source");
+        return [];
+      }
+      let gigs = await this.llm.extractGigsFromMultiplePages(okListings, dateRange);
+      if (source.type === "venue" && source.venueName) {
+        const venueName = source.venueName;
+        gigs = gigs.map((g) => ({ ...g, venueName }));
+      }
+      return gigs;
+    }
+
     // Discover event-detail URLs from the links on each listing page
     const detailUrls = new Set<string>();
     const geminiDelayMs =

@@ -30,6 +30,12 @@ export interface GigSource {
   neighborhood?: string;
   /** venue official homepage, used as a fallback link on the site */
   website?: string;
+  /**
+   * Extract gigs straight from the listing page(s), skipping detail-page discovery.
+   * Use when the listing already lists events inline AND/OR the detail pages are
+   * gated (e.g. more.com event pages sit behind a Queue-It waiting room).
+   */
+  listingOnly?: boolean;
   /** sources default to enabled; set false to skip without deleting the entry */
   enabled?: boolean;
 }
@@ -141,12 +147,14 @@ export const GIG_SOURCES: GigSource[] = [
     listingUrls: ["https://bios.gr/bios/tickets/"],
   },
   {
-    // Major aggregator (viva.gr merged into it). JS-heavy SPA — relies on
-    // Playwright rendering; failures are non-fatal (per-source try/catch).
+    // Major aggregator (viva.gr merged into it). The music listing is open over
+    // plain HTTP (handled by the scraper's http-first path), but individual event
+    // pages sit behind a Queue-It waiting room, so we extract from the listing only.
     id: "more-com",
     name: "more.com — Music",
     type: "aggregator",
     listingUrls: ["https://www.more.com/gr-en/tickets/music/"],
+    listingOnly: true,
   },
 
   // ─────────────────── Disabled pending a usable/verified listing URL ───────────────────
