@@ -68,7 +68,6 @@ const VENUE_ALIASES: Record<string, string> = {
   "πλατεια νερου": "Release Athens",
   "release athens": "Release Athens",
   "release athens festival": "Release Athens",
-  "release athens 2026": "Release Athens",
   "palaio faliro": "Release Athens",
   "παλαιό φάληρο": "Release Athens",
   "παλαιο φαληρο": "Release Athens",
@@ -79,6 +78,12 @@ const VENUE_ALIASES: Record<string, string> = {
  * Returns the canonical name if an alias is found, otherwise returns the original name trimmed.
  */
 export function normalizeVenueName(name: string): string {
-  const key = name.toLowerCase().trim();
+  // Strip a trailing year (e.g. "Release Athens 2026") so it matches the base alias
+  // without needing a per-year entry; fall back to the original name if no alias.
+  const key = name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+(?:19|20)\d{2}$/, "")
+    .trim();
   return VENUE_ALIASES[key] ?? name.trim();
 }

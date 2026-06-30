@@ -21,9 +21,6 @@ export interface SyncStats {
   errors: number;
 }
 
-/** Cap detail pages crawled per source — keeps cost bounded and diversifies coverage. */
-const MAX_DETAIL_PAGES_PER_SOURCE = 30;
-
 /** Generic tokens that shouldn't drive event-URL matching. */
 const TITLE_STOPWORDS = new Set([
   "live",
@@ -46,9 +43,6 @@ const TITLE_STOPWORDS = new Set([
   "guest",
   "guests",
   "presents",
-  "2025",
-  "2026",
-  "2027",
 ]);
 
 /**
@@ -58,7 +52,7 @@ const TITLE_STOPWORDS = new Set([
  */
 function matchEventUrl(title: string, urls: string[]): string | undefined {
   const tokens = (title.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    (t) => t.length >= 4 && !TITLE_STOPWORDS.has(t)
+    (t) => t.length >= 4 && !TITLE_STOPWORDS.has(t) && !/^\d{4}$/.test(t) // drop years
   );
   if (tokens.length === 0) {
     return undefined;
@@ -398,7 +392,7 @@ export class SyncGigsCommand {
     for (const u of source.listingUrls) {
       detailUrls.delete(u);
     }
-    const detailList = [...detailUrls].slice(0, MAX_DETAIL_PAGES_PER_SOURCE);
+    const detailList = [...detailUrls].slice(0, env.SYNC_MAX_DETAIL_PER_SOURCE);
     stats.detailUrlsFound += detailList.length;
 
     // Pass B: scrape detail pages

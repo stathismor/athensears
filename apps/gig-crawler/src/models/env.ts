@@ -41,6 +41,9 @@ export const EnvSchema = z.object({
   // pages + LLM calls.
   SYNC_SOURCE_CONCURRENCY: z.coerce.number().default(4),
 
+  // Max event-detail pages to scrape per source per run (bounds cost/time).
+  SYNC_MAX_DETAIL_PER_SOURCE: z.coerce.number().default(30),
+
   // Prune auto gigs not seen (updated) by a crawl in this many days. Acts as a
   // debounce: a gig must be missed by this many consecutive runs before removal,
   // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.
