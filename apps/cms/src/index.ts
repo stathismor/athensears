@@ -35,9 +35,11 @@ export default {
       }
     }
 
-    // Seed sample data if no venues exist
+    // Seed demo data only when explicitly enabled (SEED_SAMPLE_DATA=true) and the DB is
+    // empty. Off by default so a fresh production deploy isn't populated with sample gigs
+    // before the crawler's first run.
     const existingVenues = await strapi.query('api::venue.venue').count();
-    if (existingVenues === 0) {
+    if (existingVenues === 0 && process.env.SEED_SAMPLE_DATA === 'true') {
       const venues = [
         {
           name: 'Six Dogs',

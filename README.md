@@ -4,9 +4,9 @@ Monorepo for Athens live music events platform.
 
 ## Stack
 
-- **CMS**: Strapi v5.33.4 (PostgreSQL)
-- **Frontend**: Astro v5.16.15 + Tailwind CSS v4
-- **Gig Crawler**: Node.js service (Brave AI Grounding API)
+- **CMS**: Strapi v5 (PostgreSQL)
+- **Frontend**: Astro v5 (server-rendered via `@astrojs/node`) + Tailwind CSS v4
+- **Gig Crawler**: Node.js service — crawls a curated registry of Athens venues + ticketing pages (`apps/gig-crawler/src/models/sources.ts`) and extracts gigs with Google Gemini
 - **Package Manager**: pnpm with workspaces
 - **Node.js**: v24.13.0 (pinned via `.node-version`)
 
@@ -19,7 +19,7 @@ Run the full stack (database, CMS, crawler) with Docker:
 ```bash
 # Copy environment template
 cp .env.example .env
-# Edit .env and add your API keys (SerpAPI, Groq, Strapi token)
+# Edit .env and add your keys (GEMINI_API_KEY, STRAPI_API_TOKEN)
 
 # Start all services
 docker-compose up
@@ -30,6 +30,7 @@ docker-compose up -d
 
 Services will be available at:
 - **Strapi Admin**: http://localhost:1337/admin
+- **Web (SSR)**: http://localhost:4321
 - **Gig Crawler**: http://localhost:3000
 - **Gig Crawler Health**: http://localhost:3000/health
 
@@ -74,8 +75,8 @@ cp .env.example .env
 ```
 
 Required for gig-crawler:
-- `BRAVE_API_KEY` - Get from https://api.search.brave.com/app/dashboard (2,000-5,000 free queries/month)
-- `STRAPI_API_TOKEN` - Create in Strapi admin (Settings > API Tokens)
+- `GEMINI_API_KEY` - Get from https://aistudio.google.com/apikey
+- `STRAPI_API_TOKEN` - Create in Strapi admin (Settings > API Tokens). Needs `gig.create`, `gig.find`, `gig.update`, `venue.create`, `venue.find`.
 
 ## Development
 

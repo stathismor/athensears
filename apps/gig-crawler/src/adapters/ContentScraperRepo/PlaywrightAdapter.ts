@@ -6,20 +6,172 @@ import type { ScrapedContent } from "../../models/scrapedContent.js";
 import { env } from "../../models/env.js";
 import { logger } from "../../utils/logger.js";
 
+const BROWSER_UA =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// Hosts that serve fine over plain HTTP but block/stall headless Chromium
+// (e.g. more.com is server-rendered ASP.NET but hangs a headless browser).
+// For these we fetch HTML directly first and fall back to the browser.
+const HTTP_FIRST_HOSTS = ["more.com"];
+
+const TICKET_DOMAINS = [
+  "more.com",
+  "viva.gr",
+  "ticketservices.gr",
+  "ticketmaster.gr",
+  "eventbrite.com",
+];
+const TICKET_KEYWORDS = ["ticket", "buy", "αγορ", "εισιτ", "biliet"];
+
+/**
+ * Extract JSON-LD and OpenGraph metadata from raw HTML.
+ * Returns a concise text summary for the LLM, or undefined if nothing useful found.
+ */
+function extractStructuredData(html: string): string | undefined {
+  const parts: string[] = [];
+
+  // Extract JSON-LD blocks
+  const jsonLdRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1]);
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        // Only include event-related structured data
+        const type = (item["@type"] || "").toLowerCase();
+        if (type.includes("event") || type.includes("musicevent") || type.includes("concert")) {
+          const lines: string[] = [];
+          if (item.name) {
+            lines.push(`Event: ${item.name}`);
+          }
+          if (item.startDate) {
+            lines.push(`Date: ${item.startDate}`);
+          }
+          if (item.endDate && item.endDate !== item.startDate) {
+            lines.push(`End Date: ${item.endDate}`);
+          }
+          if (item.location?.name) {
+            lines.push(`Venue: ${item.location.name}`);
+          }
+          if (item.location?.address?.addressLocality) {
+            lines.push(`City: ${item.location.address.addressLocality}`);
+          }
+          if (item.performer) {
+            const performers = Array.isArray(item.performer) ? item.performer : [item.performer];
+            const names = performers.map((p: any) => p.name).filter(Boolean);
+            if (names.length) {
+              lines.push(`Performers: ${names.join(", ")}`);
+            }
+          }
+          if (item.offers) {
+            const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
+            for (const offer of offers) {
+              if (offer.price) {
+                lines.push(`Price: ${offer.priceCurrency || ""}${offer.price}`);
+              }
+              if (offer.url) {
+                lines.push(`Ticket URL: ${offer.url}`);
+              }
+            }
+          }
+          if (item.description) {
+            lines.push(`Description: ${item.description}`);
+          }
+          if (lines.length) {
+            parts.push(lines.join("\n"));
+          }
+        }
+      }
+    } catch {
+      // skip malformed JSON-LD
+    }
+  }
+
+  // Extract OpenGraph tags as fallback
+  if (parts.length === 0) {
+    const ogTags: Record<string, string> = {};
+    const ogRegex =
+      /<meta[^>]*property=["'](og:[^"']+)["'][^>]*content=["']([^"']+)["'][^>]*\/?>/gi;
+    while ((match = ogRegex.exec(html)) !== null) {
+      ogTags[match[1]] = match[2];
+    }
+    if (ogTags["og:title"]) {
+      const lines: string[] = [];
+      lines.push(`Title: ${ogTags["og:title"]}`);
+      if (ogTags["og:description"]) {
+        lines.push(`Description: ${ogTags["og:description"]}`);
+      }
+      if (ogTags["og:locality"]) {
+        lines.push(`City: ${ogTags["og:locality"]}`);
+      }
+      parts.push(lines.join("\n"));
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
+/** Same-domain links from a parsed document (used by the HTTP-fetch path). */
+function linksFromDoc(doc: Document, baseUrl: string): string[] {
+  const baseHostname = new URL(baseUrl).hostname;
+  const seen = new Set<string>();
+  for (const a of Array.from(doc.querySelectorAll("a[href]"))) {
+    const href = a.getAttribute("href");
+    if (!href) {
+      continue;
+    }
+    try {
+      const abs = new URL(href, baseUrl).toString();
+      if (new URL(abs).hostname === baseHostname) {
+        seen.add(abs);
+      }
+    } catch {
+      // skip invalid URLs
+    }
+  }
+  return [...seen];
+}
+
+/** Ticket links from a parsed document (used by the HTTP-fetch path). */
+function ticketLinksFromDoc(doc: Document, baseUrl: string): string[] {
+  const results: string[] = [];
+  for (const a of Array.from(doc.querySelectorAll("a[href]"))) {
+    const href = a.getAttribute("href");
+    if (!href) {
+      continue;
+    }
+    try {
+      const abs = new URL(href, baseUrl).toString();
+      const hostname = new URL(abs).hostname;
+      const text = (a.textContent || "").toLowerCase();
+      const isTicketDomain = TICKET_DOMAINS.some((d) => hostname.includes(d));
+      const isTicketText = TICKET_KEYWORDS.some(
+        (k) => text.includes(k) || href.toLowerCase().includes(k)
+      );
+      if (isTicketDomain || isTicketText) {
+        results.push(`${a.textContent?.trim() || "Ticket"}: ${abs}`);
+      }
+    } catch {
+      // skip invalid URLs
+    }
+  }
+  return results;
+}
+
 export class PlaywrightAdapter implements ScraperPort {
   private browser: Browser | null = null;
   private launching: Promise<Browser> | null = null;
 
   private getBrowser(): Promise<Browser> {
-    if (this.browser) return Promise.resolve(this.browser);
+    if (this.browser) {
+      return Promise.resolve(this.browser);
+    }
     if (!this.launching) {
       this.launching = (async () => {
         logger.info("Launching browser");
         this.browser = await chromium.launch({
-          args: [
-            "--disable-http2",
-            "--disable-blink-features=AutomationControlled",
-          ],
+          args: ["--disable-http2", "--disable-blink-features=AutomationControlled"],
         });
         this.launching = null;
         return this.browser;
@@ -29,7 +181,9 @@ export class PlaywrightAdapter implements ScraperPort {
   }
 
   async close(): Promise<void> {
-    if (this.launching) await this.launching;
+    if (this.launching) {
+      await this.launching;
+    }
     if (this.browser) {
       logger.info("Closing browser");
       await this.browser.close();
@@ -38,30 +192,88 @@ export class PlaywrightAdapter implements ScraperPort {
   }
 
   async scrape(url: string): Promise<ScrapedContent> {
-    logger.info({ url }, "Scraping URL");
+    const host = new URL(url).hostname;
+    const httpFirst = HTTP_FIRST_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+
+    if (httpFirst) {
+      // These hosts block/stall headless Chromium by definition, so a browser
+      // fallback would just waste ~60s timing out — return the HTTP result as-is.
+      return this.scrapeViaHttp(url);
+    }
+
+    const viaBrowser = await this.scrapeViaBrowser(url);
+    if (viaBrowser.success) {
+      return viaBrowser;
+    }
+    // Many sites block headless Chromium but serve fine over plain HTTP
+    logger.warn({ url }, "Browser scrape failed, falling back to HTTP fetch");
+    const viaHttp = await this.scrapeViaHttp(url);
+    return viaHttp.success ? viaHttp : viaBrowser;
+  }
+
+  /** Plain HTTP fetch with a real-browser UA — for server-rendered/anti-headless sites. */
+  private async scrapeViaHttp(url: string): Promise<ScrapedContent> {
+    logger.info({ url }, "Scraping URL (http)");
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en,el;q=0.9",
+        },
+        redirect: "follow",
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) {
+        return { url, success: false, error: `HTTP ${res.status}` };
+      }
+      const html = await res.text();
+      // Parse once and reuse the document for links + Readability (these pages
+      // can be >1MB, so repeated JSDOM parses are the dominant cost).
+      const vc = new VirtualConsole();
+      vc.on("error", () => {});
+      const doc = new JSDOM(html, { url, virtualConsole: vc }).window.document;
+      const links = linksFromDoc(doc, url);
+      const ticketLinks = ticketLinksFromDoc(doc, url);
+      logger.info({ url, linkCount: links.length }, "Extracted links (http)");
+      return this.buildContent(url, html, links, ticketLinks, doc);
+    } catch (error) {
+      logger.error({ url, error }, "Failed to scrape (http)");
+      return {
+        url,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /** Headless-browser scrape — for JS-rendered sites. */
+  private async scrapeViaBrowser(url: string): Promise<ScrapedContent> {
+    logger.info({ url }, "Scraping URL (browser)");
 
     const browser = await this.getBrowser();
     const page = await browser.newPage();
 
     try {
-      try {
-        await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-      } catch {
-        logger.warn({ url }, "networkidle failed, retrying with domcontentloaded");
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-      }
+      // Load fast on DOMContentLoaded (our sources are server-rendered), then give
+      // lazy content a brief moment to settle — but cap that at 6s instead of paying
+      // the full 30s networkidle timeout that rarely settles (analytics/ads keep it busy).
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+      await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
 
       const html = await page.content();
-
-      // Extract same-domain links via Playwright
       const baseHostname = new URL(url).hostname;
+
+      // Extract same-domain links via Playwright (captures JS-rendered links)
       const links = await page.$$eval(
         "a[href]",
         (anchors, { baseUrl, baseHostname }) => {
           const seen = new Set<string>();
           for (const a of anchors) {
             const href = a.getAttribute("href");
-            if (!href) continue;
+            if (!href) {
+              continue;
+            }
             try {
               const abs = new URL(href, baseUrl).toString();
               if (new URL(abs).hostname === baseHostname) {
@@ -78,31 +290,39 @@ export class PlaywrightAdapter implements ScraperPort {
 
       logger.info({ url, linkCount: links.length }, "Extracted links");
 
-      // Extract article text with JSDOM + Readability
-      const virtualConsole = new VirtualConsole();
-      virtualConsole.on("error", () => {});
+      // Extract external ticket links via Playwright (Readability often strips these)
+      const ticketLinks = await page.$$eval(
+        "a[href]",
+        (anchors, { baseUrl, ticketDomains, ticketKeywords }) => {
+          const results: string[] = [];
+          for (const a of anchors) {
+            const href = a.getAttribute("href");
+            if (!href) {
+              continue;
+            }
+            try {
+              const abs = new URL(href, baseUrl).toString();
+              const hostname = new URL(abs).hostname;
+              const text = (a.textContent || "").toLowerCase();
+              const isTicketDomain = ticketDomains.some((d) => hostname.includes(d));
+              const isTicketText = ticketKeywords.some(
+                (k) => text.includes(k) || href.toLowerCase().includes(k)
+              );
+              if (isTicketDomain || isTicketText) {
+                results.push(`${a.textContent?.trim() || "Ticket"}: ${abs}`);
+              }
+            } catch {
+              // skip invalid URLs
+            }
+          }
+          return results;
+        },
+        { baseUrl: url, ticketDomains: TICKET_DOMAINS, ticketKeywords: TICKET_KEYWORDS }
+      );
 
-      const dom = new JSDOM(html, { url, virtualConsole });
-      const reader = new Readability(dom.window.document);
-      const article = reader.parse();
-
-      if (article?.content) {
-        // Convert <a href="url">text</a> → text (url) to preserve link URLs for the LLM
-        const textWithLinks = article.content
-          .replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, '$2 ($1)')
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        logger.info({ url, textLength: textWithLinks.length }, "Extracted text");
-        return { url, text: textWithLinks, rawHtml: html, success: true, links };
-      }
-
-      logger.warn({ url }, "No text extracted, keeping raw HTML");
-      return { url, text: undefined, rawHtml: html, success: true, links };
+      return this.buildContent(url, html, links, ticketLinks);
     } catch (error) {
-      logger.error({ url, error }, "Failed to scrape");
+      logger.error({ url, error }, "Failed to scrape (browser)");
       return {
         url,
         text: undefined,
@@ -115,12 +335,54 @@ export class PlaywrightAdapter implements ScraperPort {
     }
   }
 
+  /** Shared: turn raw HTML + extracted links into a ScrapedContent (structured data + Readability). */
+  private buildContent(
+    url: string,
+    html: string,
+    links: string[],
+    ticketLinks: string[],
+    preParsedDoc?: Document
+  ): ScrapedContent {
+    const structuredData = extractStructuredData(html);
+
+    let doc = preParsedDoc;
+    if (!doc) {
+      const virtualConsole = new VirtualConsole();
+      virtualConsole.on("error", () => {});
+      doc = new JSDOM(html, { url, virtualConsole }).window.document;
+    }
+    // Readability mutates the document, so links must already be extracted by now.
+    const reader = new Readability(doc);
+    const article = reader.parse();
+
+    if (article?.content) {
+      // Convert <a href="url">text</a> → text (url) to preserve link URLs for the LLM
+      const textWithLinks = article.content
+        .replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const ticketSection =
+        ticketLinks.length > 0 ? `\n\n[Ticket Links]\n${ticketLinks.join("\n")}` : "";
+      const text = structuredData
+        ? `[Structured Data]\n${structuredData}\n\n[Page Content]\n${textWithLinks}${ticketSection}`
+        : `${textWithLinks}${ticketSection}`;
+      logger.info(
+        { url, textLength: text.length, hasStructuredData: !!structuredData },
+        "Extracted text"
+      );
+      return { url, text, rawHtml: html, success: true, links };
+    }
+
+    logger.warn({ url }, "No text extracted, keeping raw HTML");
+    return { url, text: undefined, rawHtml: html, success: true, links };
+  }
+
   async scrapeMany(urls: string[]): Promise<ScrapedContent[]> {
     const concurrency = parseInt(env.SCRAPER_CONCURRENCY, 10);
-    logger.info(
-      { count: urls.length, concurrency },
-      "Scraping multiple URLs concurrently"
-    );
+    logger.info({ count: urls.length, concurrency }, "Scraping multiple URLs concurrently");
 
     const results: ScrapedContent[] = new Array(urls.length);
     let next = 0;
@@ -138,10 +400,7 @@ export class PlaywrightAdapter implements ScraperPort {
     await Promise.all(workers);
 
     const successful = results.filter((r) => r.success).length;
-    logger.info(
-      { successful, total: urls.length },
-      "Completed scraping multiple URLs"
-    );
+    logger.info({ successful, total: urls.length }, "Completed scraping multiple URLs");
 
     return results;
   }

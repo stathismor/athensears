@@ -8,15 +8,14 @@ import { StrapiVenueResponseSchema, StrapiGigResponseSchema } from "../../models
 import { logger } from "../../utils/logger.js";
 import { retry } from "../../utils/retry.js";
 import { env } from "../../models/env.js";
+import { normalizeVenueName } from "../../models/venueAliases.js";
+import { normalizeTitle } from "../../utils/normalize.js";
 
 export class StrapiAdapter implements GigsPort {
   private readonly client: AxiosInstance;
   private readonly venueCache: Map<string, number> = new Map();
 
-  constructor(
-    apiUrl: string = env.STRAPI_API_URL,
-    apiToken: string = env.STRAPI_API_TOKEN
-  ) {
+  constructor(apiUrl: string = env.STRAPI_API_URL, apiToken: string = env.STRAPI_API_TOKEN) {
     this.client = axios.create({
       baseURL: apiUrl,
       headers: {
@@ -27,9 +26,7 @@ export class StrapiAdapter implements GigsPort {
     });
   }
 
-  async findVenueByName(
-    name: string
-  ): Promise<{ id: number; venue: Venue } | null> {
+  async findVenueByName(name: string): Promise<{ id: number; venue: Venue } | null> {
     // Check cache first (case-insensitive)
     const cacheKey = name.toLowerCase();
     if (this.venueCache.has(cacheKey)) {
@@ -94,34 +91,41 @@ export class StrapiAdapter implements GigsPort {
       {
         maxAttempts: 3,
         onError: (error, attempt) => {
-          logger.warn(
-            { error, attempt, venue: venue.name },
-            "Create venue attempt failed"
-          );
+          logger.warn({ error, attempt, venue: venue.name }, "Create venue attempt failed");
         },
       }
     );
   }
 
-  async findGig(title: string, date: Date): Promise<number | null> {
+  async findGig(
+    title: string,
+    date: Date
+  ): Promise<{ id: number; documentId: string; manual: boolean } | null> {
     return retry(
       async () => {
         const dateStr = date.toISOString().split("T")[0];
 
+        // Match on the normalized title within the day, so punctuation variants from
+        // different sources ("A & B" / "A / B") resolve to the same existing gig
+        // instead of creating duplicates run-to-run.
         const response = await this.client.get("/api/gigs", {
           params: {
-            "filters[title][$eqi]": title,
             "filters[date][$gte]": `${dateStr}T00:00:00.000Z`,
             "filters[date][$lte]": `${dateStr}T23:59:59.999Z`,
+            "pagination[pageSize]": 100,
           },
         });
 
         const parsed = StrapiGigResponseSchema.parse(response.data);
+        const wanted = normalizeTitle(title);
 
-        if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-          const id = parsed.data[0].id;
-          logger.info({ title, date: dateStr, id }, "Found existing gig");
-          return id;
+        if (Array.isArray(parsed.data)) {
+          const entity = parsed.data.find((g) => normalizeTitle(g.title) === wanted);
+          if (entity) {
+            const manual = entity.manual ?? false;
+            logger.info({ title, date: dateStr, id: entity.id, manual }, "Found existing gig");
+            return { id: entity.id, documentId: entity.documentId, manual };
+          }
         }
 
         return null;
@@ -145,10 +149,7 @@ export class StrapiAdapter implements GigsPort {
 
         if (parsed.data && !Array.isArray(parsed.data)) {
           const id = parsed.data.id;
-          logger.info(
-            { title: gig.title, date: gig.date, id },
-            "Created gig"
-          );
+          logger.info({ title: gig.title, date: gig.date, id }, "Created gig");
           return id;
         }
 
@@ -159,7 +160,7 @@ export class StrapiAdapter implements GigsPort {
         onError: (error, attempt) => {
           // Extract detailed error info from Axios errors
           let errorDetail = error;
-          if (error && typeof error === 'object' && 'response' in error) {
+          if (error && typeof error === "object" && "response" in error) {
             const axiosError = error as any;
             errorDetail = {
               status: axiosError.response?.status,
@@ -177,14 +178,121 @@ export class StrapiAdapter implements GigsPort {
     );
   }
 
+  async updateGig(documentId: string, gig: Gig, venueId: number): Promise<number> {
+    return retry(
+      async () => {
+        const strapiGig = toStrapiGig(gig, venueId);
+        // Strapi 5 updates by documentId
+        const response = await this.client.put(`/api/gigs/${documentId}`, strapiGig);
+
+        const parsed = StrapiGigResponseSchema.parse(response.data);
+
+        if (parsed.data && !Array.isArray(parsed.data)) {
+          const id = parsed.data.id;
+          logger.info({ title: gig.title, date: gig.date, id }, "Updated gig");
+          return id;
+        }
+
+        throw new Error("Failed to update gig: unexpected response format");
+      },
+      {
+        maxAttempts: 3,
+        onError: (error, attempt) => {
+          logger.warn({ error, attempt, gig: gig.title, documentId }, "Update gig attempt failed");
+        },
+      }
+    );
+  }
+
+  async upsertVenue(venue: Venue): Promise<number> {
+    return retry(
+      async () => {
+        const findRes = await this.client.get("/api/venues", {
+          params: { "filters[name][$eqi]": venue.name },
+        });
+        const parsed = StrapiVenueResponseSchema.parse(findRes.data);
+        const existing = Array.isArray(parsed.data) ? parsed.data[0] : undefined;
+
+        if (existing) {
+          // Patch metadata only (don't clobber the name); omit undefined fields
+          await this.client.put(`/api/venues/${existing.documentId}`, {
+            data: {
+              website: venue.website,
+              neighborhood: venue.neighborhood,
+              address: venue.address,
+            },
+          });
+          this.venueCache.set(venue.name.toLowerCase(), existing.id);
+          logger.info({ name: venue.name, id: existing.id }, "Updated venue metadata");
+          return existing.id;
+        }
+
+        const created = await this.client.post("/api/venues", toStrapiVenue(venue));
+        const cp = StrapiVenueResponseSchema.parse(created.data);
+        if (cp.data && !Array.isArray(cp.data)) {
+          this.venueCache.set(venue.name.toLowerCase(), cp.data.id);
+          logger.info({ name: venue.name, id: cp.data.id }, "Created venue (seed)");
+          return cp.data.id;
+        }
+        throw new Error("Failed to upsert venue: unexpected response format");
+      },
+      {
+        maxAttempts: 3,
+        onError: (error, attempt) => {
+          logger.warn({ error, attempt, venue: venue.name }, "Upsert venue attempt failed");
+        },
+      }
+    );
+  }
+
   async getOrCreateVenue(venueName: string): Promise<number> {
-    const existing = await this.findVenueByName(venueName);
+    const canonicalName = normalizeVenueName(venueName);
+    if (canonicalName !== venueName) {
+      logger.info({ original: venueName, canonical: canonicalName }, "Normalized venue name");
+    }
+
+    const existing = await this.findVenueByName(canonicalName);
     if (existing) {
       return existing.id;
     }
 
-    const venue: Venue = { name: venueName };
+    const venue: Venue = { name: canonicalName };
     return await this.createVenue(venue);
+  }
+
+  async pruneStaleGigs(notSeenSince: Date): Promise<number> {
+    const today = new Date().toISOString().slice(0, 10);
+    let deleted = 0;
+
+    // Re-query from page 1 each pass (deletions shift pagination); guard caps the loop.
+    for (let guard = 0; guard < 100; guard++) {
+      const response = await this.client.get("/api/gigs", {
+        params: {
+          "filters[manual][$ne]": true,
+          "filters[date][$gte]": `${today}T00:00:00.000Z`,
+          "filters[updatedAt][$lt]": notSeenSince.toISOString(),
+          "pagination[pageSize]": 50,
+        },
+      });
+      const data = response.data;
+      const gigs = Array.isArray(data.data) ? data.data : [];
+      if (gigs.length === 0) {
+        break;
+      }
+      for (const gig of gigs) {
+        try {
+          await this.client.delete(`/api/gigs/${gig.documentId}`);
+          logger.info({ title: gig.title, date: gig.date }, "Pruned stale gig (not seen recently)");
+          deleted++;
+        } catch (error) {
+          logger.warn({ id: gig.id, documentId: gig.documentId, error }, "Failed to prune gig");
+          return deleted; // stop on delete failure to avoid spinning
+        }
+      }
+    }
+
+    logger.info({ deleted, notSeenSince: notSeenSince.toISOString() }, "Pruned stale gigs");
+    return deleted;
   }
 
   async deleteAllGigs(): Promise<number> {
@@ -239,7 +347,10 @@ export class StrapiAdapter implements GigsPort {
       try {
         logger.info({ id: gig.id, documentId: gig.documentId }, "Deleting gig");
         const deleteResponse = await this.client.delete(`/api/gigs/${gig.documentId}`);
-        logger.info({ id: gig.id, documentId: gig.documentId, status: deleteResponse.status }, "Gig deleted");
+        logger.info(
+          { id: gig.id, documentId: gig.documentId, status: deleteResponse.status },
+          "Gig deleted"
+        );
         deletedCount++;
       } catch (error) {
         logger.error({ id: gig.id, documentId: gig.documentId, error }, "Failed to delete gig");

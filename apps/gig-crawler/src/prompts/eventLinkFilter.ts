@@ -16,6 +16,7 @@ Identify which links point to INDIVIDUAL EVENT DETAIL PAGES (not listing pages, 
 EVENT DETAIL PAGE characteristics:
 - Single event/concert/gig page
 - Usually contains: /event/, /concert/, /gig/, /show/, or numeric ID
+- Should be about a specific event in Athens, Greece
 - NOT: /agenda/, /calendar/, /events (plural), /archive/, /category/
 - NOT: navigation, homepage, about, contact, social media
 - NOT: ticket marketplace (external sites)
@@ -25,6 +26,12 @@ LISTING PAGE characteristics (exclude these):
 - Calendar views, agenda pages
 - Archive pages, past events
 - Category/genre pages
+
+NEWS/BLOG ARTICLE characteristics (exclude these):
+- Articles about album releases, band announcements, tour announcements
+- URLs containing: /news/, /blog/, /article/, /review/, /announce/
+- Pages discussing events in other countries/cities
+- Music industry news rather than a specific Athens event page
 
 OUTPUT FORMAT:
 {

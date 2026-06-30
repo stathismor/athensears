@@ -45,7 +45,8 @@ services:
     ports:
       - '1337:1337'
     volumes:
-      - ./apps/cms/public/uploads:/app/apps/cms/public/uploads
+      - ./apps/cms:/app/apps/cms
+      - /app/apps/cms/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,18 +57,36 @@ services:
       dockerfile: apps/gig-crawler/Dockerfile.dev
     container_name: athensears-gig-crawler
     restart: unless-stopped
+    env_file:
+      - apps/gig-crawler/.env
     environment:
       STRAPI_API_URL: http://cms:1337
-      STRAPI_API_TOKEN: ${STRAPI_API_TOKEN}
-      BRAVE_API_KEY: ${BRAVE_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       PORT: 3000
       NODE_ENV: development
       TZ: Europe/Athens
       LOG_LEVEL: debug
     ports:
       - '3000:3000'
+    volumes:
+      - ./apps/gig-crawler:/app/apps/gig-crawler
+      - /app/apps/gig-crawler/node_modules
+    depends_on:
+      - cms
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: athensears-web
+    restart: unless-stopped
+    environment:
+      # Server-side fetch over the compose network
+      STRAPI_INTERNAL_URL: http://cms:1337
+      HOST: 0.0.0.0
+      PORT: 4321
+      NODE_ENV: production
+    ports:
+      - '4321:4321'
     depends_on:
       - cms
 
