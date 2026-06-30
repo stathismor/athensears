@@ -76,6 +76,24 @@ function matchEventUrl(title: string, urls: string[]): string | undefined {
   return bestScore >= 1 ? best : undefined;
 }
 
+/** Significant tokens of a title (normalized words). */
+function titleTokens(title: string): Set<string> {
+  return new Set(normalizeTitle(title).split(" ").filter(Boolean));
+}
+
+/** True if `a` is a strict subset of `b` (every token of a is in b, and a is smaller). */
+function isStrictSubset(a: Set<string>, b: Set<string>): boolean {
+  if (a.size === 0 || a.size >= b.size) {
+    return false;
+  }
+  for (const t of a) {
+    if (!b.has(t)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Walks the curated source registry every run:
  *   Pass A — scrape each source's listing page(s) and discover event-detail URLs.
@@ -259,30 +277,60 @@ export class SyncGigsCommand {
       }
       return listingUrls.has(url) ? 1 : 2; // generic listing vs specific event page
     };
+    // Merge `b` into `a`, keeping `keepTitle ? a's : the better-linked` title, adopting the
+    // better link and backfilling any field the kept record is missing.
+    const merge = (a: Gig, b: Gig, keepTitle: boolean): Gig => {
+      const base = keepTitle || urlScore(a.url) >= urlScore(b.url) ? a : b;
+      const other = base === a ? b : a;
+      const better = urlScore(a.url) >= urlScore(b.url) ? a : b;
+      return {
+        ...base,
+        url: better.url || base.url || other.url,
+        price: base.price ?? other.price,
+        description: base.description ?? other.description,
+        genre: base.genre ?? other.genre,
+        imageUrl: base.imageUrl ?? other.imageUrl,
+      };
+    };
+    const dayVenueKey = (g: Gig): string =>
+      `${g.date.toISOString().slice(0, 10)}|${normalizeVenueName(g.venueName).toLowerCase()}`;
 
+    // Pass 1: exact match on normalized title + day + canonical venue (punctuation variants).
     const byKey = new Map<string, Gig>();
     for (const gig of gigs) {
-      // Key on the CANONICAL venue (same as storage) so e.g. "Plateia Nerou",
-      // "Παλαιό Φάληρο" and "Release Athens" collapse to one event.
-      const venueKey = normalizeVenueName(gig.venueName).toLowerCase();
-      const key = `${normalizeTitle(gig.title)}|${gig.date.toISOString().slice(0, 10)}|${venueKey}`;
+      const key = `${normalizeTitle(gig.title)}|${dayVenueKey(gig)}`;
       const existing = byKey.get(key);
-      if (!existing) {
-        byKey.set(key, gig);
-        continue;
-      }
-      const best = urlScore(gig.url) > urlScore(existing.url) ? gig : existing;
-      const other = best === gig ? existing : gig;
-      byKey.set(key, {
-        ...best,
-        url: best.url || other.url,
-        price: best.price ?? other.price,
-        description: best.description ?? other.description,
-        genre: best.genre ?? other.genre,
-        imageUrl: best.imageUrl ?? other.imageUrl,
-      });
+      byKey.set(key, existing ? merge(existing, gig, false) : gig);
     }
-    return [...byKey.values()];
+
+    // Pass 2: within the same day+venue, collapse a billing that is a token-subset of a
+    // fuller one (e.g. "Megadeth" into "Megadeth / Sepultura") — keep the fuller title.
+    const groups = new Map<string, Gig[]>();
+    for (const gig of byKey.values()) {
+      const k = dayVenueKey(gig);
+      const arr = groups.get(k);
+      if (arr) {
+        arr.push(gig);
+      } else {
+        groups.set(k, [gig]);
+      }
+    }
+    const result: Gig[] = [];
+    for (const group of groups.values()) {
+      group.sort((a, b) => titleTokens(b.title).size - titleTokens(a.title).size); // fuller first
+      const kept: Gig[] = [];
+      for (const gig of group) {
+        const tokens = titleTokens(gig.title);
+        const hostIdx = kept.findIndex((k) => isStrictSubset(tokens, titleTokens(k.title)));
+        if (hostIdx >= 0) {
+          kept[hostIdx] = merge(kept[hostIdx], gig, true); // keep fuller (host) title
+        } else {
+          kept.push(gig);
+        }
+      }
+      result.push(...kept);
+    }
+    return result;
   }
 
   /**
