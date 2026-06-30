@@ -9,6 +9,7 @@ import { logger } from "../../utils/logger.js";
 import { retry } from "../../utils/retry.js";
 import { env } from "../../models/env.js";
 import { normalizeVenueName } from "../../models/venueAliases.js";
+import { normalizeTitle } from "../../utils/normalize.js";
 
 export class StrapiAdapter implements GigsPort {
   private readonly client: AxiosInstance;
@@ -104,21 +105,27 @@ export class StrapiAdapter implements GigsPort {
       async () => {
         const dateStr = date.toISOString().split("T")[0];
 
+        // Match on the normalized title within the day, so punctuation variants from
+        // different sources ("A & B" / "A / B") resolve to the same existing gig
+        // instead of creating duplicates run-to-run.
         const response = await this.client.get("/api/gigs", {
           params: {
-            "filters[title][$eqi]": title,
             "filters[date][$gte]": `${dateStr}T00:00:00.000Z`,
             "filters[date][$lte]": `${dateStr}T23:59:59.999Z`,
+            "pagination[pageSize]": 100,
           },
         });
 
         const parsed = StrapiGigResponseSchema.parse(response.data);
+        const wanted = normalizeTitle(title);
 
-        if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-          const entity = parsed.data[0];
-          const manual = entity.manual ?? false;
-          logger.info({ title, date: dateStr, id: entity.id, manual }, "Found existing gig");
-          return { id: entity.id, documentId: entity.documentId, manual };
+        if (Array.isArray(parsed.data)) {
+          const entity = parsed.data.find((g) => normalizeTitle(g.title) === wanted);
+          if (entity) {
+            const manual = entity.manual ?? false;
+            logger.info({ title, date: dateStr, id: entity.id, manual }, "Found existing gig");
+            return { id: entity.id, documentId: entity.documentId, manual };
+          }
         }
 
         return null;

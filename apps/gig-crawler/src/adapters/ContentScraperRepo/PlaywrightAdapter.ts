@@ -196,12 +196,9 @@ export class PlaywrightAdapter implements ScraperPort {
     const httpFirst = HTTP_FIRST_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 
     if (httpFirst) {
-      const viaHttp = await this.scrapeViaHttp(url);
-      if (viaHttp.success) {
-        return viaHttp;
-      }
-      logger.warn({ url }, "HTTP fetch failed for http-first host, trying browser");
-      return this.scrapeViaBrowser(url);
+      // These hosts block/stall headless Chromium by definition, so a browser
+      // fallback would just waste ~60s timing out — return the HTTP result as-is.
+      return this.scrapeViaHttp(url);
     }
 
     const viaBrowser = await this.scrapeViaBrowser(url);

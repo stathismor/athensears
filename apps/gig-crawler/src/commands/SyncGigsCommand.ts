@@ -4,6 +4,7 @@ import type { GigsPort } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
 import { activeSources, type GigSource } from "../models/sources.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
+import { normalizeTitle } from "../utils/normalize.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
 
@@ -49,14 +50,6 @@ const TITLE_STOPWORDS = new Set([
   "2026",
   "2027",
 ]);
-
-/** Normalize a title for fuzzy dedup: lowercase, strip punctuation/separators, collapse spaces. */
-function normalizeTitle(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
 
 /**
  * Pick the candidate URL whose slug shares the most significant title tokens — used to
