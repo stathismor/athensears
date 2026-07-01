@@ -12,6 +12,22 @@ import { ACTIVE_CITY } from "../../models/city.js";
 import { env } from "../../models/env.js";
 
 /**
+ * Summarize a Gemini/fetch error into a single short line. Railway's log view
+ * only renders the message string (structured fields are hidden), so we fold the
+ * HTTP status + message in here — enough to tell an invalid key from a blocked
+ * region/IP or a bad model without dumping a full stack trace.
+ */
+function geminiErrorSummary(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { status?: number; statusText?: string; message?: string };
+    const status = [e.status, e.statusText].filter(Boolean).join(" ");
+    const message = (e.message ?? "").split("\n")[0].slice(0, 200);
+    return [status, message].filter(Boolean).join(" - ") || String(error);
+  }
+  return String(error);
+}
+
+/**
  * Normalize a genre string and decide whether the gig passes the taste filter.
  * The extraction prompt is instructed to set genre to "reject" for events that
  * don't fit (mainstream pop, EDM, comedy, theatre, tribute acts, etc.). This is
@@ -278,7 +294,10 @@ export class GeminiAdapter implements LLMPort {
       {
         maxAttempts: 3,
         onError: (error, attempt) => {
-          logger.warn({ error, attempt }, "Gemini chunk extraction attempt failed");
+          logger.warn(
+            { error, attempt },
+            `Gemini chunk extraction attempt failed: ${geminiErrorSummary(error)}`
+          );
         },
       }
     );
@@ -320,7 +339,10 @@ export class GeminiAdapter implements LLMPort {
       {
         maxAttempts: 3,
         onError: (error, attempt) => {
-          logger.warn({ error, attempt }, "Gemini link filter attempt failed");
+          logger.warn(
+            { error, attempt },
+            `Gemini link filter attempt failed: ${geminiErrorSummary(error)}`
+          );
         },
       }
     );
