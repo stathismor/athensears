@@ -1,3 +1,5 @@
+import { normalizeDashes } from "../utils/cleanTitle.js";
+
 /**
  * Maps known venue name variations to a canonical name.
  * Keys must be lowercase. The canonical name is what gets stored in Strapi.
@@ -78,12 +80,14 @@ const VENUE_ALIASES: Record<string, string> = {
  * Returns the canonical name if an alias is found, otherwise returns the original name trimmed.
  */
 export function normalizeVenueName(name: string): string {
+  // Normalize fancy dashes to a plain hyphen first, so both the alias lookup and the
+  // stored/displayed venue name are consistent.
+  const clean = normalizeDashes(name).trim();
   // Strip a trailing year (e.g. "Release Athens 2026") so it matches the base alias
-  // without needing a per-year entry; fall back to the original name if no alias.
-  const key = name
+  // without needing a per-year entry; fall back to the cleaned name if no alias.
+  const key = clean
     .toLowerCase()
-    .trim()
     .replace(/\s+(?:19|20)\d{2}$/, "")
     .trim();
-  return VENUE_ALIASES[key] ?? name.trim();
+  return VENUE_ALIASES[key] ?? clean;
 }

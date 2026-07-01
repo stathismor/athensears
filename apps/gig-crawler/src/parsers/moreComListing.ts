@@ -35,9 +35,13 @@ const STRONG_REJECT_GENRES = new Set([
   "latin",
 ]);
 
-/** Titles that are never curated indie taste, regardless of the genre bucket. */
+/**
+ * Titles that are never curated indie taste, regardless of the genre bucket:
+ * tributes/galas/kids' shows, and DJ/club party nights (which more.com sometimes
+ * mislabels with a live-music genre like "reggae", e.g. a beach-club season closing).
+ */
 const REJECT_TITLE =
-  /\b(tribute|cover band|the music of|the musical|musical|gala|disney|symphonic)\b|παιδικ|χριστουγενν/i;
+  /\b(tribute|cover band|the music of|the musical|musical|gala|disney|symphonic)\b|(?:closing|opening|beach|pool|boat|sunset|day|season)\s+(?:party|season)|\bparty\s+(?:season|night)\b|\bdj\s?set\b|\bb2b\b|παιδικ|χριστουγενν|πάρτι|παρτι/i;
 
 interface DateRange {
   startDate: string; // YYYY-MM-DD (inclusive)

@@ -56,6 +56,11 @@ function alphaTokens(s: string): string[] {
   return (s.toLowerCase().match(/\p{L}+|\p{N}+/gu) ?? []).filter((t) => !/^\d+$/.test(t));
 }
 
+/** Replace fancy dashes (figure/en/em/horizontal-bar/minus) with a plain ASCII hyphen. */
+export function normalizeDashes(s: string): string {
+  return s.replace(/[‒–—―−]/g, "-");
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -131,6 +136,9 @@ export function cleanEventTitle(
     .replace(/\s+‘[^’]{2,}’\s*$/u, "")
     .replace(/\s*\|\s.*$/u, "")
     .trim();
+
+  // 6) Normalize fancy dashes (en/em/figure/minus) to a plain hyphen.
+  t = normalizeDashes(t);
 
   return t || raw.trim();
 }
