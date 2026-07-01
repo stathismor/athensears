@@ -7,6 +7,19 @@ import { normalizeVenueName } from "../models/venueAliases.js";
 import { normalizeTitle } from "../utils/normalize.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
+import { parseMoreComListing } from "../parsers/moreComListing.js";
+
+/**
+ * Source-specific deterministic listing parsers. When a listing-only source embeds
+ * structured event data (schema.org microdata) in its HTML, parse it directly instead
+ * of running Readability + the LLM — faster, cheaper and far more reliable.
+ */
+const LISTING_PARSERS: Record<
+  string,
+  (html: string, baseUrl: string, dateRange: { startDate: string; endDate: string }) => Gig[]
+> = {
+  "more-com": parseMoreComListing,
+};
 
 export interface SyncStats {
   sources: number;
@@ -350,6 +363,21 @@ export class SyncGigsCommand {
         logger.warn({ source: source.id }, "No listing pages scraped for listing-only source");
         return [];
       }
+
+      // Structured-listing sources (e.g. more.com) embed schema.org Event microdata in
+      // the listing HTML — parse it deterministically instead of Readability + LLM.
+      const parser = LISTING_PARSERS[source.id];
+      if (parser) {
+        const parsed = okListings.flatMap((p) =>
+          p.rawHtml ? parser(p.rawHtml, p.url, dateRange) : []
+        );
+        logger.info(
+          { source: source.id, gigs: parsed.length },
+          "Extracted gigs from structured listing"
+        );
+        return parsed;
+      }
+
       let gigs = await this.llm.extractGigsFromMultiplePages(okListings, dateRange);
 
       // The gig "url" from a listing is the generic listing page. Upgrade it to a
