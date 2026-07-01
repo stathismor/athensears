@@ -12,6 +12,36 @@ function isRateLimitError(error: unknown): boolean {
   return false;
 }
 
+/** Pull an HTTP status off an axios error (`response.status`) or a Gemini/fetch error (`status`). */
+function getErrorStatus(error: unknown): number | undefined {
+  if (typeof error === "object" && error !== null) {
+    const e = error as { status?: number; response?: { status?: number } };
+    if (typeof e.status === "number") {
+      return e.status;
+    }
+    if (typeof e.response?.status === "number") {
+      return e.response.status;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A 4xx other than 429 (bad request, auth, permissions, not-found) won't succeed
+ * on retry, so retrying just burns the backoff budget before the inevitable failure.
+ * Retry only rate limits and transient errors (5xx, network, unknown).
+ */
+function isRetryable(error: unknown): boolean {
+  if (isRateLimitError(error)) {
+    return true;
+  }
+  const status = getErrorStatus(error);
+  if (status !== undefined && status >= 400 && status < 500) {
+    return false;
+  }
+  return true;
+}
+
 export async function retry<T>(
   fn: () => Promise<T>,
   options: {
@@ -41,6 +71,12 @@ export async function retry<T>(
 
       if (onError) {
         onError(error, attempt);
+      }
+
+      // Fail fast on non-retryable errors (4xx other than 429) — retrying can't help.
+      if (!isRetryable(error)) {
+        logger.error({ attempt, error }, "Non-retryable error, aborting retries");
+        throw error;
       }
 
       if (attempt < maxAttempts) {
