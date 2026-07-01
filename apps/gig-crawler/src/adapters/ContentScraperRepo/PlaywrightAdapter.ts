@@ -5,6 +5,7 @@ import type { ScraperPort } from "../../ports/ScraperPort.js";
 import type { ScrapedContent } from "../../models/scrapedContent.js";
 import { env } from "../../models/env.js";
 import { logger } from "../../utils/logger.js";
+import { retry } from "../../utils/retry.js";
 
 const BROWSER_UA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -215,19 +216,32 @@ export class PlaywrightAdapter implements ScraperPort {
   private async scrapeViaHttp(url: string): Promise<ScrapedContent> {
     logger.info({ url }, "Scraping URL (http)");
     try {
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": BROWSER_UA,
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en,el;q=0.9",
+      // Retry the network fetch: under concurrent scraping these hosts intermittently
+      // throw transient DNS/connection errors (e.g. EAI_AGAIN) or 5xx, which a short
+      // backoff clears. A single flaky fetch otherwise silently drops a whole source.
+      const html = await retry(
+        async () => {
+          const res = await fetch(url, {
+            headers: {
+              "User-Agent": BROWSER_UA,
+              Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en,el;q=0.9",
+            },
+            redirect: "follow",
+            signal: AbortSignal.timeout(20000),
+          });
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          return res.text();
         },
-        redirect: "follow",
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!res.ok) {
-        return { url, success: false, error: `HTTP ${res.status}` };
-      }
-      const html = await res.text();
+        {
+          maxAttempts: 3,
+          initialDelay: 1500,
+          onError: (error, attempt) =>
+            logger.warn({ url, attempt, error }, "HTTP fetch attempt failed, retrying"),
+        }
+      );
       // Parse once and reuse the document for links + Readability (these pages
       // can be >1MB, so repeated JSDOM parses are the dominant cost).
       const vc = new VirtualConsole();

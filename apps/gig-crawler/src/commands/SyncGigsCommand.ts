@@ -337,7 +337,35 @@ export class SyncGigsCommand {
       }
       result.push(...kept);
     }
-    return result;
+
+    // Pass 3: collapse a recurring series listed once per date under the same event page
+    // (identical normalized title + venue + specific event url across dates — e.g. a free
+    // summer music series) into ONE upcoming entry, keeping the earliest future date. The
+    // shared specific url is a strong "same event" signal, so this won't merge two distinct
+    // same-named shows that each have their own page.
+    const seriesKeyOf = (g: Gig): string | null =>
+      g.url && !listingUrls.has(g.url)
+        ? `${normalizeTitle(g.title)}|${normalizeVenueName(g.venueName).toLowerCase()}|${g.url}`
+        : null;
+    const chosen = new Map<string, Gig>();
+    const order: Array<string | Gig> = [];
+    for (const gig of result) {
+      const key = seriesKeyOf(gig);
+      if (!key) {
+        order.push(gig);
+        continue;
+      }
+      const prev = chosen.get(key);
+      if (!prev) {
+        chosen.set(key, gig);
+        order.push(key);
+      } else {
+        const earliest = gig.date < prev.date ? gig : prev;
+        const other = earliest === gig ? prev : gig;
+        chosen.set(key, merge(earliest, other, true)); // keep earliest's date/title, backfill
+      }
+    }
+    return order.map((o) => (typeof o === "string" ? chosen.get(o)! : o));
   }
 
   /**

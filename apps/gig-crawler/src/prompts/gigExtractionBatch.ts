@@ -1,7 +1,9 @@
+import { ACTIVE_CITY } from "../models/city.js";
+
 export const GIG_EXTRACTION_BATCH_PROMPT = (
   scrapedPages: Array<{ url: string; content: string }>,
   dateRange?: { startDate: string; endDate: string }
-) => `You are extracting structured information about live music events, concerts, and gigs in Athens, Greece from multiple web pages.
+) => `You are extracting structured information about live music events, concerts, and gigs in ${ACTIVE_CITY.name} from multiple web pages.
 ${dateRange ? `\n**Date Range:** Only extract events between ${dateRange.startDate} and ${dateRange.endDate}. Skip any events outside this range.\n` : ""}
 
 **CRITICAL - Taste Filter (this is a strictly curated indie/alternative listing):**
@@ -45,7 +47,7 @@ Extract all upcoming music events from ALL the pages below that match the genre 
 - **url** (required): The Source URL of the page where this event was found (from the "Source URL:" field above each page)
 
 **Important Guidelines:**
-1. **Athens-only rule (STRICT):** ONLY extract events that EXPLICITLY take place in Athens, Greece. The page MUST mention Athens (Αθήνα) OR a known Athens venue. If the page does not mention any city, or mentions ANY other Greek city (Θεσσαλονίκη, Πάτρα, Ηράκλειο, Λάρισα, Βόλος, Ιωάννινα, Καβάλα, etc.), produce ZERO events from that page. When in doubt, skip
+1. **${ACTIVE_CITY.name}-only rule (STRICT):** ONLY extract events that EXPLICITLY take place in ${ACTIVE_CITY.name} (${ACTIVE_CITY.nameAliases.join(", ")}). The page MUST mention ${ACTIVE_CITY.name} OR a known ${ACTIVE_CITY.name} venue. If the page does not mention any city, or mentions ANY other city, produce ZERO events from that page. When in doubt, skip
 2. Only extract future events (skip past events)
 3. **Date accuracy (STRICT):** If the page does NOT show a specific day AND month for an event, produce ZERO events from that page. NEVER guess, infer, or default to today's date. A year alone (e.g. "2026") is NOT a valid date. A month alone (e.g. "July") is NOT a valid date. You need at minimum a day and month (e.g. "5 July", "05/07/2026")
 4. Use the venue name from the content, not generic descriptions

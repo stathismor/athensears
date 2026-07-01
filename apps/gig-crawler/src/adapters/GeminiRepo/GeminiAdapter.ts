@@ -7,6 +7,8 @@ import { retry } from "../../utils/retry.js";
 import { parseFlexibleDate } from "../../utils/dateUtils.js";
 import { GIG_EXTRACTION_BATCH_PROMPT } from "../../prompts/gigExtractionBatch.js";
 import { EVENT_LINK_FILTER_PROMPT } from "../../prompts/eventLinkFilter.js";
+import { cleanEventTitle } from "../../utils/cleanTitle.js";
+import { ACTIVE_CITY } from "../../models/city.js";
 import { env } from "../../models/env.js";
 
 /**
@@ -251,10 +253,11 @@ export class GeminiAdapter implements LLMPort {
                 continue;
               }
 
+              const venueName = gigData.venue_name || "Unknown Venue";
               gigs.push({
-                title: gigData.title,
+                title: cleanEventTitle(gigData.title, venueName, ACTIVE_CITY.nameAliases),
                 date,
-                venueName: gigData.venue_name || "Unknown Venue",
+                venueName,
                 description: gigData.description,
                 price: normalizePrice(gigData.price),
                 url: normalizeUrl(gigData.url) || normalizeUrl(gigData.ticket_url) || "",
