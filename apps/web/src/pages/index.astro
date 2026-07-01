@@ -1,29 +1,9 @@
 ---
 import '../styles/global.css';
-
-interface Venue {
-  id: number;
-  name: string;
-  address?: string;
-  website?: string;
-  neighborhood?: string;
-}
-
-interface Gig {
-  id: number;
-  title: string;
-  date: string;
-  time_display?: string;
-  price?: string;
-  description?: string;
-  url?: string;
-  genre?: string;
-  venue?: Venue;
-}
-
-interface StrapiResponse {
-  data: Gig[];
-}
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import GigRow from '../components/GigRow.astro';
+import { getMonthLabel, monthKey, type Gig, type StrapiResponse } from '../lib/gigs';
 
 let gigs: Gig[] = [];
 let error: string | null = null;
@@ -52,44 +32,6 @@ try {
 } catch (e) {
   error = 'Could not load gigs. Make sure the CMS is running.';
 }
-
-// Group gigs by month
-function groupByMonth(gigs: Gig[]): Map<string, Gig[]> {
-  const grouped = new Map<string, Gig[]>();
-  for (const gig of gigs) {
-    const date = new Date(gig.date);
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    if (!grouped.has(monthKey)) {
-      grouped.set(monthKey, []);
-    }
-    grouped.get(monthKey)!.push(gig);
-  }
-  return grouped;
-}
-
-function getMonthLabel(monthKey: string): string {
-  const [year, month] = monthKey.split('-');
-  const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-  return date.toLocaleDateString('en-GB', { month: 'long' });
-}
-
-function formatDate(dateStr: string): { weekday: string; day: string } {
-  const date = new Date(dateStr);
-  const dayNum = date.getDate();
-
-  // Add ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
-  let suffix = 'th';
-  if (dayNum % 10 === 1 && dayNum !== 11) suffix = 'st';
-  else if (dayNum % 10 === 2 && dayNum !== 12) suffix = 'nd';
-  else if (dayNum % 10 === 3 && dayNum !== 13) suffix = 'rd';
-
-  return {
-    weekday: date.toLocaleDateString('en-GB', { weekday: 'short' }),
-    day: dayNum + suffix,
-  };
-}
-
-const gigsByMonth = groupByMonth(gigs);
 ---
 
 <html lang="en">
@@ -99,135 +41,57 @@ const gigsByMonth = groupByMonth(gigs);
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
-    <meta name="description" content="Discover gigs happening in Athens, Greece" />
-    <title>Athens Ears - Gigs in Athens</title>
+    <meta name="description" content="Curated gigs in Athens, Greece" />
+    <title>Athens Ears — Curated gigs in Athens</title>
   </head>
-  <body class="bg-white text-carbon_black-500 min-h-screen">
-    <div class="max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <header class="mb-10 sm:mb-14">
-        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-carbon_black-500">
-          Athens Ears
-        </h1>
-        <p class="text-dim_grey-500 mt-2 sm:mt-3 text-base sm:text-lg">Gigs in Athens</p>
-      </header>
+  <body class="min-h-screen bg-paper text-ink">
+    <div class="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-10 lg:max-w-7xl lg:px-8">
+      <div
+        class="rounded-2xl border border-line bg-surface px-6 py-8 shadow-sm shadow-ink/5 sm:rounded-3xl sm:px-10 sm:py-12 lg:px-14 lg:py-14"
+      >
+        <SiteHeader />
 
-      <main>
-        {
-          error && (
-            <div class="text-deep_crimson-600 bg-deep_crimson-900 border border-deep_crimson-700 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )
-        }
+        <main class="mt-5 sm:mt-7">
+          {
+            error && (
+              <div class="rounded-xl border border-accent-strong/30 bg-accent/5 px-4 py-3 font-medium text-accent-strong">
+                {error}
+              </div>
+            )
+          }
 
-        {
-          !error && gigs.length === 0 && (
-            <p class="text-dim_grey-500 text-lg">No upcoming gigs found.</p>
-          )
-        }
+          {!error && gigs.length === 0 && <p class="text-lg text-muted">No upcoming gigs found.</p>}
 
-        {
-          !error && gigs.length > 0 && (
-            <div class="space-y-10 sm:space-y-12">
-              {Array.from(gigsByMonth.entries()).map(([monthKey, monthGigs]) => (
-                <section>
-                  <h2 class="text-sm sm:text-base font-semibold text-orange-500 mb-4 uppercase tracking-widest">
-                    {getMonthLabel(monthKey)}
-                  </h2>
-                  <ul class="divide-y divide-dim_grey-300/40">
-                    {monthGigs.map((gig) => {
-                      const { weekday, day } = formatDate(gig.date);
-                      return (
-                        <li class="py-1 sm:py-1.5 hover:bg-white-700/30 -mx-3 px-3 transition-colors">
-                          {/* Mobile layout */}
-                          <div class="sm:hidden font-mono">
-                            <div class="flex items-center justify-between mb-1">
-                              <span class="text-dim_grey-500 text-sm">
-                                {weekday} {day}
-                              </span>
-                              {gig.url ? (
-                                <a
-                                  href={gig.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  class="text-orange-500 text-sm hover:text-orange-600 underline"
-                                >
-                                  {gig.price || 'Info'}
-                                </a>
-                              ) : gig.price ? (
-                                <span class="text-orange-500 text-sm">{gig.price}</span>
-                              ) : null}
-                            </div>
-                            <div class="font-medium text-carbon_black-500 mb-1">{gig.title}</div>
-                            {gig.venue && (
-                              <div class="text-dim_grey-500 text-sm">
-                                {gig.venue.website ? (
-                                  <a
-                                    href={gig.venue.website}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="hover:text-dim_grey-600 underline"
-                                  >
-                                    {gig.venue.name}
-                                  </a>
-                                ) : (
-                                  <span>{gig.venue.name}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
+          {
+            !error && gigs.length > 0 && (
+              <div>
+                {gigs.map((gig, i) => {
+                  const newMonth = i === 0 || monthKey(gig.date) !== monthKey(gigs[i - 1].date);
+                  return (
+                    <Fragment>
+                      {newMonth && (
+                        <div
+                          class:list={[
+                            '-mx-4 mb-1 px-4',
+                            i === 0 ? 'mt-0' : 'mt-6 border-t border-line pt-5',
+                          ]}
+                        >
+                          <span class="text-xs font-bold uppercase tracking-[0.25em] text-muted">
+                            {getMonthLabel(gig.date)}
+                          </span>
+                        </div>
+                      )}
+                      <GigRow gig={gig} divider={!newMonth} />
+                    </Fragment>
+                  );
+                })}
+              </div>
+            )
+          }
+        </main>
 
-                          {/* Desktop layout */}
-                          <div class="hidden sm:flex items-baseline gap-4 font-mono">
-                            <div class="w-24 flex-shrink-0 text-dim_grey-500 text-sm">
-                              {weekday} {day}
-                            </div>
-                            <div class="flex-1 min-w-0 truncate">
-                              <span class="font-medium text-carbon_black-500">{gig.title}</span>
-                            </div>
-                            <div class="w-56 flex-shrink-0 text-sm text-dim_grey-500 truncate">
-                              {gig.venue?.website ? (
-                                <a
-                                  href={gig.venue.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  class="hover:text-dim_grey-600 underline"
-                                >
-                                  {gig.venue.name}
-                                </a>
-                              ) : gig.venue ? (
-                                <span>{gig.venue.name}</span>
-                              ) : null}
-                            </div>
-                            <div class="w-20 shrink-0 text-right text-sm text-orange-500">
-                              {gig.url ? (
-                                <a
-                                  href={gig.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  class="hover:text-orange-600 underline"
-                                >
-                                  {gig.price || 'Info'}
-                                </a>
-                              ) : (
-                                <span>{gig.price || '-'}</span>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          )
-        }
-      </main>
-
-      <footer class="mt-16 sm:mt-20 pt-8 border-t border-dim_grey-300/40 text-dim_grey-600 text-sm">
-        <p>&copy; {new Date().getFullYear()} Athens Ears</p>
-      </footer>
+        <SiteFooter />
+      </div>
     </div>
   </body>
 </html>

@@ -1,0 +1,29 @@
+---
+import { Image } from 'astro:assets';
+import lycabettus from '../assets/lycabettus-line.png';
+---
+
+<header
+  class="flex flex-col gap-8 sm:gap-10 lg:flex-row lg:items-center lg:justify-between lg:gap-12"
+>
+  <div class="lg:flex-1">
+    <h1
+      class="text-6xl font-extrabold uppercase leading-[0.82] tracking-tight text-ink sm:text-7xl lg:text-8xl"
+    >
+      Athens<br />Ears
+    </h1>
+    <p class="mt-4 text-xs font-semibold uppercase tracking-[0.22em] text-muted sm:mt-5 sm:text-sm">
+      Curated gigs in Athens
+    </p>
+  </div>
+  <div class="lg:max-w-md xl:max-w-lg">
+    <Image
+      src={lycabettus}
+      alt="Line illustration of Lycabettus Hill, Athens"
+      widths={[440, 660, 880]}
+      sizes="(min-width: 1024px) 28rem, 90vw"
+      class="h-auto w-full select-none mix-blend-multiply"
+      loading="eager"
+    />
+  </div>
+</header>

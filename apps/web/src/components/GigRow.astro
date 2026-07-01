@@ -1,0 +1,143 @@
+---
+import type { Gig } from '../lib/gigs';
+import { formatDate, stripGreekAccents } from '../lib/gigs';
+
+interface Props {
+  gig: Gig;
+  /** Draw a hairline above this row (skipped for the first row under a month divider). */
+  divider?: boolean;
+}
+
+const { gig, divider = false } = Astro.props;
+const { weekday, day, month } = formatDate(gig.date);
+
+// Greek uppercase convention drops the tonos; strip it for display (keep the
+// accented original in aria-label so screen readers still pronounce it).
+const artist = stripGreekAccents(gig.title);
+const venueName = gig.venue ? stripGreekAccents(gig.venue.name) : '';
+
+const linkClass =
+  'underline underline-offset-4 transition-colors focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+---
+
+<div
+  class:list={['-mx-4 px-4 transition-colors hover:bg-paper/60', divider && 'border-t border-line']}
+>
+  {/* Desktop row */}
+  <div class="hidden gig-cols items-center gap-6 py-2 sm:grid">
+    <div class="flex w-fit flex-col items-center justify-self-start leading-none">
+      <span class="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-accent-strong">
+        {weekday}
+      </span>
+      <span class="text-2xl font-extrabold leading-none text-accent tabular-nums">{day}</span>
+      <span class="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-accent-strong">
+        {month}
+      </span>
+    </div>
+
+    <div class="min-w-0">
+      <span
+        title={artist.toUpperCase()}
+        class="block truncate text-base font-bold uppercase tracking-tight text-ink"
+      >
+        {artist}
+      </span>
+    </div>
+
+    <div class="min-w-0 truncate text-sm uppercase tracking-wide text-muted">
+      {
+        gig.venue?.website ? (
+          <a
+            href={gig.venue.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={venueName.toUpperCase()}
+            class={`${linkClass} decoration-line hover:text-ink hover:decoration-ink`}
+          >
+            {venueName}
+          </a>
+        ) : gig.venue ? (
+          <span title={venueName.toUpperCase()}>{venueName}</span>
+        ) : null
+      }
+    </div>
+
+    <div class="text-right text-sm font-bold text-accent-strong">
+      {
+        gig.url ? (
+          <a
+            href={gig.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Tickets for ${gig.title}`}
+            class={`${linkClass} decoration-accent/40 hover:text-accent hover:decoration-accent`}
+          >
+            {gig.price || 'Info'}
+          </a>
+        ) : (
+          <span>{gig.price || '-'}</span>
+        )
+      }
+    </div>
+  </div>
+
+  {/* Mobile card */}
+  <div class="flex gap-3 py-2 sm:hidden">
+    <div class="flex w-8 shrink-0 flex-col items-center pt-0.5 leading-none">
+      <span class="text-[0.55rem] font-bold uppercase tracking-[0.1em] text-accent-strong">
+        {weekday}
+      </span>
+      <span class="text-xl font-extrabold leading-none text-accent tabular-nums">{day}</span>
+      <span class="text-[0.55rem] font-bold uppercase tracking-[0.1em] text-accent-strong">
+        {month}
+      </span>
+    </div>
+
+    <div class="min-w-0 flex-1">
+      <h3
+        title={artist.toUpperCase()}
+        class="truncate text-base font-bold uppercase tracking-tight text-ink"
+      >
+        {artist}
+      </h3>
+
+      {
+        gig.venue && (
+          <p class="mt-0.5 truncate text-sm uppercase tracking-wide text-muted">
+            {gig.venue.website ? (
+              <a
+                href={gig.venue.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={venueName.toUpperCase()}
+                class={`${linkClass} decoration-line hover:text-ink hover:decoration-ink`}
+              >
+                {venueName}
+              </a>
+            ) : (
+              <span title={venueName.toUpperCase()}>{venueName}</span>
+            )}
+          </p>
+        )
+      }
+
+      <div class="mt-0.5 text-sm font-bold text-accent-strong">
+        {
+          gig.url ? (
+            <a
+              href={gig.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Tickets for ${gig.title}`}
+              class={`${linkClass} inline-block decoration-accent/40 hover:text-accent hover:decoration-accent`}
+            >
+              {gig.price || 'Info'}
+            </a>
+          ) : gig.price ? (
+            <span>{gig.price}</span>
+          ) : null
+        }
+      </div>
+    </div>
+  </div>
+</div>
