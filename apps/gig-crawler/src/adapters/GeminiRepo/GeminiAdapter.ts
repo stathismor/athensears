@@ -23,7 +23,12 @@ function normalizeGenre(raw: string | undefined): string | undefined {
   if (!trimmed || /^(reject|skip|none|n\/a)$/i.test(trimmed)) {
     return undefined;
   }
-  return trimmed;
+  // The model sometimes returns several genres ("Jazz, Free Jazz, Folk, ...") — keep the
+  // first (its best single match) so we stay within the CMS `genre` field (maxLength 50).
+  return trimmed
+    .split(/\s*[,/|]\s*/)[0]
+    .slice(0, 50)
+    .trim();
 }
 
 function normalizePrice(raw: string | undefined): string | undefined {

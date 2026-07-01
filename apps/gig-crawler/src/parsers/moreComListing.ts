@@ -45,15 +45,58 @@ interface DateRange {
   endDate: string; // YYYY-MM-DD (inclusive)
 }
 
-/** Drop redundant "live in Athens" tails so titles read as just the act. */
-function cleanTitle(raw: string): string {
-  const cleaned = raw
+function alphaTokens(s: string): string[] {
+  return (s.toLowerCase().match(/\p{L}+|\p{N}+/gu) ?? []).filter((t) => !/^\d+$/.test(t));
+}
+
+/**
+ * Normalize a more.com title to the clean act name so it matches the same event from
+ * our venue sources (which use plain artist titles) and reads cleanly on the site.
+ *
+ * more.com prefixes festival days with the festival/venue ("Release Athens 2026 / Pantera")
+ * and appends show subtitles ("DWARVES | 40 Years Anniversary Show", "LEDISI 'For Dinah'").
+ * We strip a leading prefix that only repeats the (normalized) venue name + optional year,
+ * and trailing quoted / anniversary / "| …" subtitles. Co-headline bills ("Megadeth /
+ * Sepultura") are preserved — only venue-repeating prefixes are removed.
+ */
+function cleanTitle(raw: string, normalizedVenue: string): string {
+  let t = raw.trim();
+
+  // Strip a leading "<venue> [year] /" or "<venue> [year]:" prefix (up to twice, for
+  // "Release Athens 2026: 2-Day Offer / …"). Only when every prefix word is in the venue.
+  const venueTokens = new Set(alphaTokens(normalizedVenue));
+  for (let i = 0; i < 2 && venueTokens.size > 0; i++) {
+    const m = t.match(/^([^/:]{1,60})[/:]\s*(.+)$/u);
+    if (!m) {
+      break;
+    }
+    const prefixWords = alphaTokens(m[1]).filter((w) => !/^(?:19|20)\d{2}$/.test(w));
+    if (prefixWords.length > 0 && prefixWords.every((w) => venueTokens.has(w))) {
+      t = m[2].trim();
+    } else {
+      break;
+    }
+  }
+
+  // Trailing subtitle noise: anniversary tags, quoted show names, "| …" tails.
+  t = t
+    .replace(/\s*[|–-]\s*\d+\s+years?\s+anniversary.*$/iu, "")
+    .replace(/\s+"[^"]{2,}"\s*$/u, "")
+    .replace(/\s+“[^”]{2,}”\s*$/u, "")
+    .replace(/\s+'[^']{2,}'\s*$/u, "")
+    .replace(/\s+‘[^’]{2,}’\s*$/u, "")
+    .replace(/\s*\|\s.*$/u, "")
+    .trim();
+
+  // Redundant "live in Athens" tails.
+  t = t
     .replace(/\s*[-–—]?\s*live\s+(?:in|at)\s+athens\b/i, "")
     .replace(/\s*[-–—]?\s*live\s+στην\s+αθήνα\b/i, "")
     .replace(/\s*[-–—]?\s*στην\s+αθήνα\b/i, "")
     .replace(/\s{2,}/g, " ")
     .trim();
-  return cleaned || raw.trim();
+
+  return t || raw.trim();
 }
 
 /**
@@ -139,10 +182,11 @@ export function parseMoreComListing(html: string, baseUrl: string, dateRange: Da
       }
     }
 
+    const venueName = normalizeVenueName(venueRaw);
     gigs.push({
-      title: cleanTitle(rawTitle),
+      title: cleanTitle(rawTitle, venueName),
       date,
-      venueName: normalizeVenueName(venueRaw),
+      venueName,
       url,
       genre: KEEP_GENRES[keepGenre],
       imageUrl,
