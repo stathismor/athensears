@@ -38,15 +38,17 @@ interfaces (`ScraperPort`, `LLMPort`, `GigsPort`), with concrete adapters inject
 | Port | Adapter | External Service |
 |---|---|---|
 | `ScraperPort` | `PlaywrightAdapter` | Chromium (headless) |
-| `LLMPort` | `GeminiAdapter` | Google Gemini 1.5 Flash |
+| `LLMPort` | `GeminiAdapter` | Google Gemini (Flash-Lite by default) |
 | `GigsPort` | `StrapiAdapter` | Strapi REST API |
 
 ### cms (Strapi 5)
 
-Headless CMS backed by PostgreSQL 16. Two content types:
+Headless CMS backed by PostgreSQL 16. Content types:
 
 - **Gig** — title, date, time_display, price, description, url, **genre**, manual (boolean), venue (relation)
 - **Venue** — name, address, website, neighborhood
+- **Crawl Cache** (single-type) — one internal JSON blob (`data`) holding the crawler's
+  extraction cache; written by the crawler via its API token, not exposed publicly
 
 On bootstrap, grants public read access to both content types and seeds sample data if the
 database is empty. A custom `POST /api/gigs/deleteAll` endpoint supports bulk cleanup of
@@ -81,6 +83,8 @@ For each enabled source in GIG_SOURCES:
     → extracts JSON-LD, OpenGraph, Readability text
     → Gemini batch-extracts structured gigs with a strict taste filter,
       emitting a `genre` per gig (out-of-genre events are rejected)
+    → extraction cache: pages whose content hash is unchanged since a recent run
+      skip the Gemini call and replay stored gigs (see Cost controls)
     → for venue sources, the known canonical venue name is stamped onto every gig
 
 Then, across all sources:
@@ -96,7 +100,7 @@ leaves existing gigs in place rather than emptying the site.
 
 | Service | Purpose |
 |---|---|
-| **Google Gemini** (1.5 Flash) | Event-link filtering, structured gig extraction + taste/genre classification (JSON mode, temp 0.1) |
+| **Google Gemini** (Flash-Lite, via `GEMINI_MODEL`) | Event-link filtering, structured gig extraction + taste/genre classification (JSON mode, temp 0.1) |
 | **Playwright/Chromium** | Headless browser for scraping (with Readability + JSON-LD extraction) |
 | **Strapi 5** | Headless CMS with REST API for venue/gig storage |
 | **PostgreSQL 16** | Persistent database |
@@ -113,6 +117,28 @@ leaves existing gigs in place rather than emptying the site.
 
 Venue normalization adds another layer: an alias map (`venueAliases.ts`) canonicalizes names
 like "gagarin" → "Gagarin 205" for aggregator-sourced gigs, with an in-memory cache.
+
+## Cost controls
+
+Gemini token spend (extraction is >95% of it) is bounded by:
+
+- **Model tier** — `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` (cheapest). Bump to
+  `gemini-flash-latest` if extraction/taste-filter quality regresses.
+- **Extraction cache** (`PageExtractionCache`) — each scraped page's prompt content is hashed
+  (SHA-256 of the exact `{url,content}` string sent to the model); a hit (same hash, within
+  `CRAWLER_CACHE_TTL_DAYS`) replays stored gigs instead of calling Gemini. Since event pages
+  rarely change, most nights re-pay for almost nothing. The batch extraction prompt returns
+  gigs grouped by page so each page's result caches independently. Cached gigs are re-filtered
+  against the (daily-shifting) date window on replay; a TTL forces periodic re-extraction so
+  far-future events entering the window self-heal.
+  - **Storage:** the whole `url → {hash,gigs}` map is one JSON blob in the Strapi `crawl-cache`
+    single-type (Postgres) — no files or volumes. The crawler reaches it over REST with its
+    existing token (needs `crawl-cache` find + update); `StrapiCacheStore` does one GET to load
+    and one PUT to save per run. Loaded once at sync start, flushed once at the end.
+  - **Fail-safe:** if the cache is unreachable or `CRAWLER_CACHE_ENABLED=false`, every lookup
+    misses and nothing is written — the run just makes more Gemini calls, never breaks.
+- **Volume knobs** — `SYNC_MAX_DETAIL_PER_SOURCE` (pages/source), `GEMINI_CHUNK_SIZE`
+  (pages/call), `CRON_SCHEDULE` (run frequency).
 
 ## Architecture Patterns
 

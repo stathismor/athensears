@@ -5,7 +5,7 @@ import { logger } from "./utils/logger.js";
 import { PlaywrightAdapter } from "./adapters/ContentScraperRepo/PlaywrightAdapter.js";
 import { GeminiAdapter } from "./adapters/GeminiRepo/GeminiAdapter.js";
 import { StrapiAdapter } from "./adapters/StrapiRepo/StrapiAdapter.js";
-import { SyncGigsCommand } from "./commands/SyncGigsCommand.js";
+import { SyncGigsCommand, type SyncOptions } from "./commands/SyncGigsCommand.js";
 
 const app = express();
 const port = parseInt(env.PORT, 10);
@@ -19,7 +19,7 @@ const gigsAdapter = new StrapiAdapter();
 let isSyncRunning = false;
 
 // Sync function
-async function syncGigs(options: { clearExisting?: boolean; monthsAhead?: number } = {}) {
+async function syncGigs(options: SyncOptions = {}) {
   if (isSyncRunning) {
     logger.warn("Sync already in progress, skipping");
     return;
@@ -65,6 +65,12 @@ app.post("/api/sync", (req, res) => {
   const monthsAhead = req.query.monthsAhead
     ? parseInt(req.query.monthsAhead as string, 10)
     : undefined;
+  // Cache on by default; ?cache=false or ?force=true bypasses it (full re-extraction).
+  const useCache = !(req.query.cache === "false" || req.query.force === "true");
+  // Small-scale test knob: cap how many sources are crawled.
+  const maxSources = req.query.maxSources
+    ? parseInt(req.query.maxSources as string, 10)
+    : undefined;
 
   if (isSyncRunning) {
     return res.status(409).json({
@@ -73,10 +79,16 @@ app.post("/api/sync", (req, res) => {
     });
   }
 
-  logger.info({ clearExisting, monthsAhead }, "Manual sync triggered via API");
+  const options: SyncOptions = {
+    clearExisting,
+    monthsAhead,
+    useCache,
+    maxSources,
+  };
+  logger.info({ options }, "Manual sync triggered via API");
 
   // Start sync in background (don't await)
-  syncGigs({ clearExisting, monthsAhead }).catch((error) => {
+  syncGigs(options).catch((error) => {
     logger.error({ error }, "Background sync failed");
   });
 
@@ -169,7 +181,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: "/api/sync (POST) - Start background sync",
+      sync: "/api/sync (POST) - Start background sync. Query params: clear=true, monthsAhead=N, cache=false|force=true (bypass cache), maxSources=N",
       syncStatus: "/api/sync/status (GET) - Check sync status",
     },
   });

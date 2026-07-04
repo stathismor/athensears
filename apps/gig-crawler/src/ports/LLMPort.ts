@@ -17,4 +17,14 @@ export interface LLMPort {
     links: string[],
     pageContext: { url: string; title?: string }
   ): Promise<string[]>;
+
+  /**
+   * Prepare the extraction cache for a run. Called once before a sync; optional so
+   * implementations without a cache need not provide it. Pass `useCache: false` to
+   * bypass the cache entirely for this run (no reads, no writes).
+   */
+  loadCache?(useCache: boolean): Promise<void>;
+
+  /** Persist the extraction cache. Called once after a sync run. */
+  flushCache?(): Promise<void>;
 }

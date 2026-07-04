@@ -58,8 +58,8 @@ Extract all upcoming music events from ALL the pages below that match the genre 
 7. **Ticket links:** Look for full ticket purchase URLs (not bare domains). Only include a ticket_url if you find a complete URL with a path to the specific event page
 8. **URL field:** For each event, set "url" to the "Source URL" shown at the top of the page where you found the event
 9. Extract events from ALL pages provided
-10. If a page has no events, skip it and move to the next
-11. Return all events from all pages in a single array
+10. If a page has no events, still include its entry with an empty "gigs" array
+11. Group the events by the page they came from (see Output Format)
 12. **Avoid duplicates:** If the same artist/event appears multiple times with the same date, only extract it once
 13. **Multi-band/festival events:** If a page describes a single event (e.g. a festival day, a multi-band concert) with multiple bands performing, extract it as ONE event. Use the event/festival name as the title, and list the performing bands in the description. Do NOT create a separate event for each band
 14. **Date accuracy:** When a page lists multiple events, carefully match each event's date to that specific event. Do not mix dates between events. For Songkick pages, the date is shown prominently at the top of each event page — use that date, not dates from sidebar or related events. Greek dates use month names like Ιανουαρίου, Φεβρουαρίου, Μαρτίου, Απριλίου, Μαΐου, Ιουνίου, Ιουλίου, Αυγούστου, Σεπτεμβρίου, Οκτωβρίου, Νοεμβρίου, Δεκεμβρίου — parse these carefully. If two sources show different dates for the same event, prefer the venue's own website
@@ -83,28 +83,30 @@ ${page.content.slice(0, 15000)}
   .join("\n")}
 
 **Output Format:**
-Return your response as a JSON object with this exact structure:
+Return your response as a JSON object with this exact structure. Include one entry
+per page (using the PAGE number shown above each page), with that page's events in
+its "gigs" array. A page with no matching events MUST still appear with "gigs": [].
 
 {
-  "gigs": [
+  "results": [
     {
-      "title": "Artist Name",
-      "date": "2026-02-15T20:00:00",
-      "venue_name": "Venue Name",
-      "genre": "Post-rock",
-      "description": "Rock band from London, support by Local Act",
-      "price": "€15",
-      "url": "https://source-page-url.com",
-      "image_url": "https://example.com/poster.jpg"
+      "page": 1,
+      "gigs": [
+        {
+          "title": "Artist Name",
+          "date": "2026-02-15T20:00:00",
+          "venue_name": "Venue Name",
+          "genre": "Post-rock",
+          "description": "Rock band from London, support by Local Act",
+          "price": "€15",
+          "url": "https://source-page-url.com",
+          "image_url": "https://example.com/poster.jpg"
+        }
+      ]
     },
     {
-      "title": "Another Artist",
-      "date": "2026-02-16T21:00:00",
-      "venue_name": "Another Venue",
-      "genre": "Jazz",
-      "description": "Jazz night",
-      "price": "Free",
-      "url": "https://another-source-page.com"
+      "page": 2,
+      "gigs": []
     }
   ]
 }

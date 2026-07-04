@@ -1,0 +1,18 @@
+{
+  "kind": "singleType",
+  "collectionName": "crawl_cache",
+  "info": {
+    "singularName": "crawl-cache",
+    "pluralName": "crawl-caches",
+    "displayName": "Crawl Cache",
+    "description": "Gig-crawler extraction cache: a single JSON blob mapping scraped-page URL to its content hash + previously extracted gigs, so unchanged pages skip the Gemini call. Managed by the crawler; not meant to be hand-edited."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "data": {
+      "type": "json"
+    }
+  }
+}

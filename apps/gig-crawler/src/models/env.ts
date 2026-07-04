@@ -9,9 +9,12 @@ export const EnvSchema = z.object({
   // source registry in models/sources.ts; kept optional for backwards compat)
   BRAVE_API_KEY: z.string().optional(),
 
-  // Google Gemini API
+  // Google Gemini API.
+  // Default is the Flash-Lite tier — ~3x cheaper input tokens than Flash and
+  // adequate for this structured extraction task. If you notice the taste filter
+  // / genre labelling degrading, override GEMINI_MODEL back to "gemini-flash-latest".
   GEMINI_API_KEY: z.string(),
-  GEMINI_MODEL: z.string().default("gemini-flash-latest"),
+  GEMINI_MODEL: z.string().default("gemini-flash-lite-latest"),
 
   // Server
   PORT: z.string().default("3000"),
@@ -48,6 +51,19 @@ export const EnvSchema = z.object({
   // debounce: a gig must be missed by this many consecutive runs before removal,
   // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.
   SYNC_PRUNE_GRACE_DAYS: z.coerce.number().default(3),
+
+  // Extraction cache. Skips the Gemini extraction call for a scraped page whose
+  // content is byte-identical to a recent run (event detail pages rarely change),
+  // replaying the cached gigs instead — the dominant cost saver. Persisted in the
+  // Strapi `crawl-cache` single-type (Postgres), so no files/volumes are involved;
+  // the crawler's Strapi API token needs find+update on it. Entries older than
+  // CRAWLER_CACHE_TTL_DAYS are re-extracted regardless of hash, so far-future events
+  // entering the date window and any missed edits self-heal. Set false to disable.
+  CRAWLER_CACHE_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
+  CRAWLER_CACHE_TTL_DAYS: z.coerce.number().default(7),
 
   // Logging
   LOG_LEVEL: z.string().default("info"),

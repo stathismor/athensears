@@ -21,6 +21,20 @@ const LISTING_PARSERS: Record<
   "more-com": parseMoreComListing,
 };
 
+export interface SyncOptions {
+  /** Wipe non-manual gigs before syncing (rarely needed). */
+  clearExisting?: boolean;
+  /** Date-window size; defaults to SYNC_MONTHS_AHEAD. */
+  monthsAhead?: number;
+  /**
+   * Use the extraction cache (default true). Set false to force a full re-extraction
+   * that ignores AND does not write the cache — useful for testing or a forced refresh.
+   */
+  useCache?: boolean;
+  /** Crawl at most this many sources (for small-scale/local test runs). */
+  maxSources?: number;
+}
+
 export interface SyncStats {
   sources: number;
   listingPagesScraped: number;
@@ -116,10 +130,9 @@ export class SyncGigsCommand {
     private readonly gigs: GigsPort
   ) {}
 
-  async execute(
-    options: { clearExisting?: boolean; monthsAhead?: number } = {}
-  ): Promise<SyncStats> {
+  async execute(options: SyncOptions = {}): Promise<SyncStats> {
     const monthsAhead = options.monthsAhead ?? env.SYNC_MONTHS_AHEAD;
+    const useCache = options.useCache ?? true;
     const now = new Date();
     const startDate = now.toISOString().slice(0, 10);
     const endDateObj = new Date(now);
@@ -140,11 +153,21 @@ export class SyncGigsCommand {
       errors: 0,
     };
 
-    const sources = activeSources();
+    let sources = activeSources();
+    if (options.maxSources !== undefined && options.maxSources >= 0) {
+      sources = sources.slice(0, options.maxSources);
+    }
     stats.sources = sources.length;
 
     logger.info(
-      { monthsAhead, startDate, endDate, sources: sources.map((s) => s.id) },
+      {
+        monthsAhead,
+        startDate,
+        endDate,
+        useCache,
+        maxSources: options.maxSources,
+        sources: sources.map((s) => s.id),
+      },
       "Starting gig sync (curated source registry)"
     );
 
@@ -177,6 +200,11 @@ export class SyncGigsCommand {
         }
       }
 
+      // Load the extraction cache up front so unchanged pages skip the Gemini call.
+      // Best-effort: a cache failure logs and proceeds without it (see PageExtractionCache).
+      // When useCache is false the cache is explicitly bypassed (no reads, no writes).
+      await this.llm.loadCache?.(useCache);
+
       // Collect gigs from sources in parallel (each stamps its own venue). A worker
       // pool bounds how many sources scrape/extract at once.
       const allGigs: Gig[] = [];
@@ -201,6 +229,9 @@ export class SyncGigsCommand {
       await Promise.all(
         Array.from({ length: Math.min(sourceConcurrency, sources.length) }, () => collectWorker())
       );
+
+      // Persist the extraction cache once, now that all sources have extracted.
+      await this.llm.flushCache?.();
 
       // Collapse cross-source duplicates (same event listed by venue + aggregators)
       const dedupedGigs = this.dedupeGigs(allGigs, sources);
