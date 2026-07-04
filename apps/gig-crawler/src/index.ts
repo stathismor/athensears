@@ -27,12 +27,9 @@ async function syncGigs(options: SyncOptions = {}) {
 
   isSyncRunning = true;
   try {
-    logger.info({ options }, "Starting gig sync");
-
+    // Start/complete + full stats are logged inside command.execute(); don't repeat here.
     const command = new SyncGigsCommand(scraperAdapter, llmAdapter, gigsAdapter);
-
-    const stats = await command.execute(options);
-    logger.info({ stats }, "Sync completed successfully");
+    await command.execute(options);
   } catch (error) {
     logger.error({ error }, "Sync failed");
   } finally {
