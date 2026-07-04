@@ -17,9 +17,9 @@ Monorepo for Athens live music events platform.
 Run the full stack (database, CMS, crawler) with Docker:
 
 ```bash
-# Copy environment template
-cp .env.example .env
-# Edit .env and add your keys (GEMINI_API_KEY, STRAPI_API_TOKEN)
+# Copy each app's environment template and fill in the values
+cp apps/cms/.env.example apps/cms/.env                  # CMS secrets
+cp apps/gig-crawler/.env.example apps/gig-crawler/.env  # GEMINI_API_KEY, STRAPI_API_TOKEN
 
 # Start all services
 docker-compose up
@@ -68,15 +68,16 @@ pnpm dev:crawler
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Each app has its own env file (no root `.env`). Copy the templates and configure:
 
 ```bash
-cp .env.example .env
+cp apps/cms/.env.example apps/cms/.env
+cp apps/gig-crawler/.env.example apps/gig-crawler/.env
 ```
 
 Required for gig-crawler:
 - `GEMINI_API_KEY` - Get from https://aistudio.google.com/apikey
-- `STRAPI_API_TOKEN` - Create in Strapi admin (Settings > API Tokens). Needs `gig.create`, `gig.find`, `gig.update`, `venue.create`, `venue.find`.
+- `STRAPI_API_TOKEN` - Create in Strapi admin (Settings > API Tokens). Needs `gig.create`, `gig.find`, `gig.update`, `venue.create`, `venue.find`, `crawl-cache.find`, `crawl-cache.update`.
 
 ## Development
 

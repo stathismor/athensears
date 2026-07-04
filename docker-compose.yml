@@ -23,25 +23,22 @@ services:
       dockerfile: apps/cms/Dockerfile.dev
     container_name: athensears-cms
     restart: unless-stopped
+    # Secrets (APP_KEYS, salts, JWT/encryption) live in the app's own env file,
+    # same pattern as the crawler. Copy apps/cms/.env.example -> apps/cms/.env.
+    env_file:
+      - apps/cms/.env
     environment:
-      # Database
+      # Docker-topology config only — differs from local/prod, so it stays here,
+      # not in apps/cms/.env (e.g. DATABASE_HOST is the compose service name).
       DATABASE_CLIENT: postgres
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_NAME: strapi
       DATABASE_USERNAME: strapi
       DATABASE_PASSWORD: strapi
-      # Server
       HOST: 0.0.0.0
       PORT: 1337
       NODE_ENV: development
-      # Secrets (change these in production!)
-      APP_KEYS: ${APP_KEYS:-key1,key2,key3,key4}
-      API_TOKEN_SALT: ${API_TOKEN_SALT:-tobemodified}
-      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-tobemodified}
-      TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:-tobemodified}
-      JWT_SECRET: ${JWT_SECRET:-tobemodified}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-tobemodified}
     ports:
       - '1337:1337'
     volumes:
