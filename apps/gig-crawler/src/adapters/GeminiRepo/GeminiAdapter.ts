@@ -218,6 +218,9 @@ export class GeminiAdapter implements LLMPort {
   private readonly genAI: GoogleGenerativeAI;
   private readonly model: string;
   private readonly cache: PageExtractionCache;
+  // Per-run page tallies (reset on loadCache): pages replayed from cache vs sent to Gemini.
+  private runPagesFromCache = 0;
+  private runPagesToGemini = 0;
 
   constructor(
     apiKey: string = env.GEMINI_API_KEY,
@@ -231,12 +234,19 @@ export class GeminiAdapter implements LLMPort {
 
   /** Prepare the extraction cache for a run. Call once at the start of a sync run. */
   async loadCache(useCache: boolean): Promise<void> {
+    this.runPagesFromCache = 0;
+    this.runPagesToGemini = 0;
     await this.cache.load(useCache);
   }
 
   /** Persist the extraction cache. Call once at the end of a sync run. */
   async flushCache(): Promise<void> {
     await this.cache.flush();
+  }
+
+  /** Per-run page tallies: pages replayed from cache vs sent to Gemini. */
+  getCacheStats(): { pagesFromCache: number; pagesToGemini: number } {
+    return { pagesFromCache: this.runPagesFromCache, pagesToGemini: this.runPagesToGemini };
   }
 
   async extractGigsFromMultiplePages(
@@ -277,6 +287,8 @@ export class GeminiAdapter implements LLMPort {
     }
 
     const cacheHits = successfulPages.length - missPages.length;
+    this.runPagesFromCache += cacheHits;
+    this.runPagesToGemini += missPages.length;
     logger.info(
       {
         totalPages: successfulPages.length,

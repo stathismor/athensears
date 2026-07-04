@@ -40,6 +40,10 @@ export interface SyncStats {
   listingPagesScraped: number;
   detailUrlsFound: number;
   detailPagesScraped: number;
+  /** Pages replayed from the extraction cache (Gemini call skipped). */
+  pagesFromCache: number;
+  /** Pages sent to Gemini for extraction (cache misses). */
+  pagesToGemini: number;
   gigsExtracted: number;
   gigsCreated: number;
   gigsUpdated: number;
@@ -145,6 +149,8 @@ export class SyncGigsCommand {
       listingPagesScraped: 0,
       detailUrlsFound: 0,
       detailPagesScraped: 0,
+      pagesFromCache: 0,
+      pagesToGemini: 0,
       gigsExtracted: 0,
       gigsCreated: 0,
       gigsUpdated: 0,
@@ -232,6 +238,13 @@ export class SyncGigsCommand {
 
       // Persist the extraction cache once, now that all sources have extracted.
       await this.llm.flushCache?.();
+
+      // Fold the run's cache tallies into the stats summary.
+      const cacheStats = this.llm.getCacheStats?.();
+      if (cacheStats) {
+        stats.pagesFromCache = cacheStats.pagesFromCache;
+        stats.pagesToGemini = cacheStats.pagesToGemini;
+      }
 
       // Collapse cross-source duplicates (same event listed by venue + aggregators)
       const dedupedGigs = this.dedupeGigs(allGigs, sources);

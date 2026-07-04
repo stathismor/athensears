@@ -27,4 +27,7 @@ export interface LLMPort {
 
   /** Persist the extraction cache. Called once after a sync run. */
   flushCache?(): Promise<void>;
+
+  /** Per-run page tallies: pages replayed from cache vs sent to the LLM. */
+  getCacheStats?(): { pagesFromCache: number; pagesToGemini: number };
 }
