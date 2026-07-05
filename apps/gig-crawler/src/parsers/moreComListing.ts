@@ -157,3 +157,78 @@ export function parseMoreComListing(html: string, baseUrl: string, dateRange: Da
   );
   return gigs;
 }
+
+/**
+ * Detail-page URLs for more.com events the deterministic genre filter skips: region-
+ * matched, in-window events tagged only "other" (no keep-genre) that still pass the
+ * tribute/locale checks. more.com's genre vocabulary is coarse - it lumps post-metal,
+ * noise, garage, folk, experimental etc. into "other" - so these are handed to the LLM,
+ * which classifies genre against the full taste list and rejects the actual junk (Greek
+ * pop/laïkó, comedy, theatre). Returns absolute, de-duplicated URLs.
+ */
+export function extractMoreComOtherUrls(
+  html: string,
+  baseUrl: string,
+  dateRange: DateRange
+): string[] {
+  const vc = new VirtualConsole();
+  vc.on("error", () => {});
+  const doc = new JSDOM(html, { virtualConsole: vc }).window.document;
+  const origin = new URL(baseUrl).origin;
+  const areaIds = new Set(ACTIVE_CITY.moreCom.areaIds);
+  const urls = new Set<string>();
+
+  for (const article of Array.from(doc.querySelectorAll("article[itemscope]"))) {
+    const cls = article.className || "";
+
+    const areaMatch = cls.match(/\barea(\d+)d\d{8}\b/);
+    if (!areaMatch || !areaIds.has(areaMatch[1])) {
+      continue;
+    }
+
+    const genres = [...cls.matchAll(/\bmusic([a-z]+)d\d{8}\b/g)].map((m) => m[1]);
+    // Only events with NO keep-genre (those are already taken deterministically), that
+    // ARE tagged "other", and aren't a strong-reject genre.
+    if (genres.some((g) => g in KEEP_GENRES)) {
+      continue;
+    }
+    if (!genres.includes("other") || genres.some((g) => STRONG_REJECT_GENRES.has(g))) {
+      continue;
+    }
+
+    const startDate = article.querySelector("meta[itemprop='startDate']")?.getAttribute("content");
+    const rawTitle = (
+      article.querySelector("h3[itemprop='name'], .playinfo__title")?.textContent ||
+      article.querySelector("meta[itemprop='description']")?.getAttribute("content") ||
+      ""
+    ).trim();
+    const href =
+      article.querySelector("meta[itemprop='url']")?.getAttribute("content") ||
+      article.querySelector("a[href]")?.getAttribute("href");
+    const venueRaw = (article.querySelector("#PlayVenue")?.textContent || "").trim();
+
+    if (!startDate || !rawTitle || !href) {
+      continue;
+    }
+    if (REJECT_TITLE.test(rawTitle) || isExcludedLocale(`${venueRaw} ${rawTitle}`)) {
+      continue;
+    }
+
+    const date = new Date(startDate);
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
+    const day = date.toISOString().slice(0, 10);
+    if (day < dateRange.startDate || day > dateRange.endDate) {
+      continue;
+    }
+
+    try {
+      urls.add(new URL(href, origin).toString());
+    } catch {
+      // skip invalid URL
+    }
+  }
+
+  return [...urls];
+}

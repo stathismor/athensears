@@ -8,7 +8,7 @@ import { normalizeVenueName } from "../models/venueAliases.js";
 import { normalizeTitle } from "../utils/normalize.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
-import { parseMoreComListing } from "../parsers/moreComListing.js";
+import { parseMoreComListing, extractMoreComOtherUrls } from "../parsers/moreComListing.js";
 import { extractPriceFromHtml } from "../utils/extractPrice.js";
 
 /**
@@ -21,6 +21,19 @@ const LISTING_PARSERS: Record<
   (html: string, baseUrl: string, dateRange: { startDate: string; endDate: string }) => Gig[]
 > = {
   "more-com": parseMoreComListing,
+};
+
+/**
+ * Per-source extractors of detail-page URLs for events the deterministic listing parser
+ * skips on genre (source tags them "other"). When SYNC_ESCALATE_OTHER is on, these pages
+ * are scraped and batch-extracted through the LLM, recovering acts the coarse source
+ * tagging buries. Mirrors LISTING_PARSERS; only sources with an entry escalate.
+ */
+const LISTING_OTHER_URL_EXTRACTORS: Record<
+  string,
+  (html: string, baseUrl: string, dateRange: { startDate: string; endDate: string }) => string[]
+> = {
+  "more-com": extractMoreComOtherUrls,
 };
 
 export interface SyncOptions {
@@ -459,8 +472,47 @@ export class SyncGigsCommand {
           { source: source.id, gigs: parsed.length },
           "Extracted gigs from structured listing"
         );
-        // The structured listing carries no price - fill it from each event's detail page.
-        return this.enrichMissingPrices(source, parsed, okListings);
+
+        // Escalate events the coarse genre filter skipped (tagged "other") to the LLM:
+        // scrape their detail pages and batch-extract, recovering acts the source's
+        // tagging buries. The LLM's taste filter drops the genuine junk.
+        let escalatedGigs: Gig[] = [];
+        let escalatedPages: ScrapedContent[] = [];
+        const otherExtractor = LISTING_OTHER_URL_EXTRACTORS[source.id];
+        if (env.SYNC_ESCALATE_OTHER && otherExtractor) {
+          const found = [
+            ...new Set(
+              okListings.flatMap((p) =>
+                p.rawHtml ? otherExtractor(p.rawHtml, p.url, dateRange) : []
+              )
+            ),
+          ];
+          const otherUrls = found.slice(0, env.SYNC_MAX_DETAIL_PER_SOURCE);
+          if (found.length > otherUrls.length) {
+            logger.warn(
+              { source: source.id, found: found.length, cap: env.SYNC_MAX_DETAIL_PER_SOURCE },
+              "Capped 'other' escalation URLs - raise SYNC_MAX_DETAIL_PER_SOURCE to cover all"
+            );
+          }
+          if (otherUrls.length > 0) {
+            const scrapes = await this.scraper.scrapeMany(otherUrls);
+            escalatedPages = scrapes.filter((s) => s.success);
+            stats.detailUrlsFound += otherUrls.length;
+            stats.detailPagesScraped += escalatedPages.length;
+            escalatedGigs = await this.llm.extractGigsFromMultiplePages(escalatedPages, dateRange);
+            logger.info(
+              { source: source.id, otherUrls: otherUrls.length, kept: escalatedGigs.length },
+              "Escalated 'other'-tagged listing events to the LLM"
+            );
+          }
+        }
+
+        // Fill missing prices; reuse the escalated detail HTML we just scraped (no re-fetch).
+        return this.enrichMissingPrices(
+          source,
+          [...parsed, ...escalatedGigs],
+          [...okListings, ...escalatedPages]
+        );
       }
 
       let gigs = await this.llm.extractGigsFromMultiplePages(okListings, dateRange);

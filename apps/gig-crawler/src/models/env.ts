@@ -60,6 +60,15 @@ export const EnvSchema = z.object({
     .default("true")
     .transform((v) => v !== "false" && v !== "0"),
 
+  // Escalate more.com events tagged only "other" (which the deterministic genre filter
+  // skips) to the LLM: scrape their detail pages and batch-extract, recovering curated
+  // acts more.com's coarse tagging buries (post-metal, noise, garage, folk...). Bounded
+  // by SYNC_MAX_DETAIL_PER_SOURCE and cached like all extraction. Set false to disable.
+  SYNC_ESCALATE_OTHER: z
+    .string()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
+
   // Prune auto gigs not seen (updated) by a crawl in this many days. Acts as a
   // debounce: a gig must be missed by this many consecutive runs before removal,
   // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.
