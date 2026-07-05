@@ -25,12 +25,14 @@ const linkClass =
 >
   {/* Desktop row */}
   <div class="hidden gig-cols items-center gap-6 py-2 sm:grid">
-    <div class="flex w-fit flex-col items-center justify-self-start leading-none">
-      <span class="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-accent-strong">
+    <div class="flex w-[1.9rem] flex-col justify-self-start font-sans leading-none">
+      <span class="text-[0.7rem] font-bold uppercase tracking-[0.3em] text-accent-strong">
         {weekday}
       </span>
-      <span class="text-2xl font-extrabold leading-none text-accent tabular-nums">{day}</span>
-      <span class="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-accent-strong">
+      <span class="text-center text-2xl font-extrabold leading-none text-accent tabular-nums">
+        {day}
+      </span>
+      <span class="text-[0.7rem] font-bold uppercase tracking-[0.3em] text-accent-strong">
         {month}
       </span>
     </div>
@@ -83,12 +85,14 @@ const linkClass =
 
   {/* Mobile card */}
   <div class="flex gap-3 py-2 sm:hidden">
-    <div class="flex w-8 shrink-0 flex-col items-center pt-0.5 leading-none">
-      <span class="text-[0.55rem] font-bold uppercase tracking-[0.1em] text-accent-strong">
+    <div class="flex w-8 shrink-0 flex-col pt-0.5 font-sans leading-none">
+      <span class="text-[0.58rem] font-bold uppercase tracking-[0.28em] text-accent-strong">
         {weekday}
       </span>
-      <span class="text-xl font-extrabold leading-none text-accent tabular-nums">{day}</span>
-      <span class="text-[0.55rem] font-bold uppercase tracking-[0.1em] text-accent-strong">
+      <span class="text-center text-xl font-extrabold leading-none text-accent tabular-nums">
+        {day}
+      </span>
+      <span class="text-[0.58rem] font-bold uppercase tracking-[0.28em] text-accent-strong">
         {month}
       </span>
     </div>

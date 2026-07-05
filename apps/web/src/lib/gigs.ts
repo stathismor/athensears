@@ -80,7 +80,9 @@ export function formatDate(dateStr: string): { weekday: string; day: string; mon
   return {
     weekday: date.toLocaleDateString('en-GB', { weekday: 'short' }),
     day: String(date.getDate()),
-    month: date.toLocaleDateString('en-GB', { month: 'short' }),
+    // Clamp to 3 letters so it lines up with the 3-letter weekday in the
+    // stacked date block (en-GB renders September as the 4-letter "Sept").
+    month: date.toLocaleDateString('en-GB', { month: 'short' }).slice(0, 3),
   };
 }
 
