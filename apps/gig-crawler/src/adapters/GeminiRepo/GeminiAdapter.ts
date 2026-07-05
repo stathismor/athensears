@@ -29,26 +29,42 @@ function geminiErrorSummary(error: unknown): string {
   return String(error);
 }
 
+const REJECT_GENRE = /^(reject|skip|none|n\/a)$/i;
+
 /**
- * Normalize a genre string and decide whether the gig passes the taste filter.
- * The extraction prompt is instructed to set genre to "reject" for events that
- * don't fit (mainstream pop, EDM, comedy, theatre, tribute acts, etc.). This is
- * the code-side backstop: drop anything rejected or with no genre at all.
+ * Normalize the model's genre value into up to 3 genres (most to least relevant), and
+ * apply the taste filter. The extraction prompt sets the genre to "reject" for events
+ * that don't fit (mainstream pop, EDM, comedy, theatre, tribute acts, etc.); a rejected
+ * or empty value yields [] here, which is the code-side backstop that drops the gig.
  */
-function normalizeGenre(raw: string | undefined): string | undefined {
+function normalizeGenres(raw: string | undefined): string[] {
   if (!raw) {
-    return undefined;
+    return [];
   }
   const trimmed = raw.trim();
-  if (!trimmed || /^(reject|skip|none|n\/a)$/i.test(trimmed)) {
-    return undefined;
+  if (!trimmed || REJECT_GENRE.test(trimmed)) {
+    return [];
   }
-  // The model sometimes returns several genres ("Jazz, Free Jazz, Folk, ...") - keep the
-  // first (its best single match) so we stay within the CMS `genre` field (maxLength 50).
-  return trimmed
-    .split(/\s*[,/|]\s*/)[0]
-    .slice(0, 50)
-    .trim();
+  // The model returns one or more genres ("Jazz, Free Jazz, Folk"); keep up to 3,
+  // de-duplicated, each capped at 50 chars.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of trimmed.split(/\s*[,/|]\s*/)) {
+    const g = part.trim();
+    if (!g || REJECT_GENRE.test(g)) {
+      continue;
+    }
+    const key = g.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(g.slice(0, 50));
+    if (out.length >= 3) {
+      break;
+    }
+  }
+  return out;
 }
 
 function normalizeUrl(raw: string | undefined): string | undefined {
@@ -147,8 +163,8 @@ function buildGigsFromData(
       }
 
       // Taste backstop: drop anything the model rejected or left ungenred
-      const genre = normalizeGenre(gigData.genre);
-      if (!genre) {
+      const genres = normalizeGenres(gigData.genre);
+      if (genres.length === 0) {
         logger.debug(
           { title: gigData.title, rawGenre: gigData.genre },
           "Skipping gig that failed the genre/taste filter"
@@ -164,7 +180,7 @@ function buildGigsFromData(
         description: gigData.description,
         price: normalizePrice(gigData.price),
         url: normalizeUrl(gigData.url) || normalizeUrl(gigData.ticket_url) || "",
-        genre,
+        genres,
         imageUrl: gigData.image_url,
       });
     } catch (error) {

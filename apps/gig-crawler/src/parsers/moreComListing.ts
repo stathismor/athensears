@@ -82,10 +82,13 @@ export function parseMoreComListing(html: string, baseUrl: string, dateRange: Da
     }
     inRegion++;
 
-    // Genre taste filter from the `music<genre>` class tokens.
-    const genres = [...cls.matchAll(/\bmusic([a-z]+)d\d{8}\b/g)].map((m) => m[1]);
-    const keepGenre = genres.find((g) => g in KEEP_GENRES);
-    if (!keepGenre || genres.some((g) => STRONG_REJECT_GENRES.has(g))) {
+    // Genre taste filter from the `music<genre>` class tokens. Passes if at least one
+    // token is an allowed genre (and none is a strong-reject); we keep up to 3.
+    const tokens = [...cls.matchAll(/\bmusic([a-z]+)d\d{8}\b/g)].map((m) => m[1]);
+    const keptGenres = [
+      ...new Set(tokens.filter((g) => g in KEEP_GENRES).map((g) => KEEP_GENRES[g])),
+    ].slice(0, 3);
+    if (keptGenres.length === 0 || tokens.some((g) => STRONG_REJECT_GENRES.has(g))) {
       continue;
     }
 
@@ -143,7 +146,7 @@ export function parseMoreComListing(html: string, baseUrl: string, dateRange: Da
       date,
       venueName,
       url,
-      genre: KEEP_GENRES[keepGenre],
+      genres: keptGenres,
       imageUrl,
     });
   }

@@ -14,7 +14,8 @@ export interface Gig {
   price?: string;
   description?: string;
   url?: string;
-  genre?: string;
+  /** Up to 3 genres (stored, not currently rendered). */
+  genres?: string[];
   venue?: Venue;
 }
 

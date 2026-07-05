@@ -35,9 +35,8 @@
       "type": "string",
       "maxLength": 500
     },
-    "genre": {
-      "type": "string",
-      "maxLength": 50
+    "genres": {
+      "type": "json"
     },
     "venue": {
       "type": "relation",

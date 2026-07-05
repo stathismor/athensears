@@ -351,7 +351,7 @@ export class SyncGigsCommand {
         url: better.url || base.url || other.url,
         price: base.price ?? other.price,
         description: base.description ?? other.description,
-        genre: base.genre ?? other.genre,
+        genres: base.genres ?? other.genres,
         imageUrl: base.imageUrl ?? other.imageUrl,
       };
     };
