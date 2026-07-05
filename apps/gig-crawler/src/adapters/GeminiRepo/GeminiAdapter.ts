@@ -8,6 +8,7 @@ import { parseFlexibleDate } from "../../utils/dateUtils.js";
 import { GIG_EXTRACTION_BATCH_PROMPT } from "../../prompts/gigExtractionBatch.js";
 import { EVENT_LINK_FILTER_PROMPT } from "../../prompts/eventLinkFilter.js";
 import { cleanEventTitle } from "../../utils/cleanTitle.js";
+import { normalizePrice } from "../../utils/normalizePrice.js";
 import { ACTIVE_CITY } from "../../models/city.js";
 import { env } from "../../models/env.js";
 import { PageExtractionCache } from "../CacheRepo/PageExtractionCache.js";
@@ -15,7 +16,7 @@ import { PageExtractionCache } from "../CacheRepo/PageExtractionCache.js";
 /**
  * Summarize a Gemini/fetch error into a single short line. Railway's log view
  * only renders the message string (structured fields are hidden), so we fold the
- * HTTP status + message in here — enough to tell an invalid key from a blocked
+ * HTTP status + message in here - enough to tell an invalid key from a blocked
  * region/IP or a bad model without dumping a full stack trace.
  */
 function geminiErrorSummary(error: unknown): string {
@@ -42,53 +43,12 @@ function normalizeGenre(raw: string | undefined): string | undefined {
   if (!trimmed || /^(reject|skip|none|n\/a)$/i.test(trimmed)) {
     return undefined;
   }
-  // The model sometimes returns several genres ("Jazz, Free Jazz, Folk, ...") — keep the
+  // The model sometimes returns several genres ("Jazz, Free Jazz, Folk, ...") - keep the
   // first (its best single match) so we stay within the CMS `genre` field (maxLength 50).
   return trimmed
     .split(/\s*[,/|]\s*/)[0]
     .slice(0, 50)
     .trim();
-}
-
-function normalizePrice(raw: string | undefined): string | undefined {
-  if (!raw) {
-    return undefined;
-  }
-  const trimmed = raw.trim();
-  if (!trimmed || trimmed === "N/A" || trimmed === "€" || trimmed === "EUR") {
-    return undefined;
-  }
-  if (/sold\s*out/i.test(trimmed)) {
-    return "Sold Out";
-  }
-  if (/free/i.test(trimmed)) {
-    return "Free";
-  }
-
-  // Extract all numeric values (handles €16, 18€, 29,50, 27.50, €20-€30, etc.)
-  const numbers: number[] = [];
-  const regex = /(\d+)[.,](\d+)|\d+/g;
-  let match;
-  while ((match = regex.exec(trimmed)) !== null) {
-    if (match[1] !== undefined) {
-      // Has decimal part (e.g. 27.50 or 29,50)
-      numbers.push(parseFloat(`${match[1]}.${match[2]}`));
-    } else {
-      numbers.push(parseInt(match[0], 10));
-    }
-  }
-
-  if (numbers.length === 0) {
-    return undefined;
-  }
-
-  const min = Math.min(...numbers);
-  const amount = Math.floor(min);
-  if (amount <= 0) {
-    return undefined;
-  }
-
-  return `€${amount}`;
 }
 
 function normalizeUrl(raw: string | undefined): string | undefined {
@@ -275,13 +235,13 @@ export class GeminiAdapter implements LLMPort {
         cacheHitGigs.push(...inWindow);
         logger.debug(
           { url: sc.url, cache: "HIT", gigs: inWindow.length },
-          "Extraction cache hit — skipping Gemini call for this page"
+          "Extraction cache hit - skipping Gemini call for this page"
         );
       } else {
         missPages.push(sc);
         logger.debug(
           { url: sc.url, cache: "MISS" },
-          "Extraction cache miss — will call Gemini for this page"
+          "Extraction cache miss - will call Gemini for this page"
         );
       }
     }
@@ -337,7 +297,7 @@ export class GeminiAdapter implements LLMPort {
       })
     );
 
-    // Persist each attributed page's result (empty included — "no gigs" is worth
+    // Persist each attributed page's result (empty included - "no gigs" is worth
     // caching). Unattributed groups (url === null, e.g. a malformed response) are
     // returned but never cached, so a bad parse can't poison future runs.
     const freshGigs: Gig[] = [];
@@ -351,7 +311,7 @@ export class GeminiAdapter implements LLMPort {
         }
       }
     }
-    // Note: no flush here — the cache is persisted once per run via flushCache(),
+    // Note: no flush here - the cache is persisted once per run via flushCache(),
     // avoiding redundant/racy writes while sources extract concurrently.
 
     const allGigs = [...cacheHitGigs, ...freshGigs];
@@ -368,7 +328,7 @@ export class GeminiAdapter implements LLMPort {
    * page so the caller can cache each page's result independently. Every input page
    * gets exactly one group (url set, `gigs` possibly empty). On a malformed response
    * that can't be attributed to pages, a single fallback group with `url: null` is
-   * returned — its gigs are still used but never cached.
+   * returned - its gigs are still used but never cached.
    */
   private async extractGigsFromChunk(
     pages: ScrapedContent[],
@@ -412,7 +372,7 @@ export class GeminiAdapter implements LLMPort {
           }
 
           // Fallback: flat {gigs:[...]} (older shape). Can't attribute to pages, so
-          // return one unattributed group — used but not cached.
+          // return one unattributed group - used but not cached.
           if (Array.isArray(data.gigs)) {
             logger.warn("Extraction response used the flat shape; skipping cache for this chunk");
             return [{ url: null, gigs: buildGigsFromData(data.gigs, dateRange) }];

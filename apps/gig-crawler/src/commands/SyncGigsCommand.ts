@@ -2,17 +2,19 @@ import type { ScraperPort } from "../ports/ScraperPort.js";
 import type { LLMPort } from "../ports/LLMPort.js";
 import type { GigsPort } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
+import type { ScrapedContent } from "../models/scrapedContent.js";
 import { activeSources, type GigSource } from "../models/sources.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
 import { normalizeTitle } from "../utils/normalize.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
 import { parseMoreComListing } from "../parsers/moreComListing.js";
+import { extractPriceFromHtml } from "../utils/extractPrice.js";
 
 /**
  * Source-specific deterministic listing parsers. When a listing-only source embeds
  * structured event data (schema.org microdata) in its HTML, parse it directly instead
- * of running Readability + the LLM — faster, cheaper and far more reliable.
+ * of running Readability + the LLM - faster, cheaper and far more reliable.
  */
 const LISTING_PARSERS: Record<
   string,
@@ -28,7 +30,7 @@ export interface SyncOptions {
   monthsAhead?: number;
   /**
    * Use the extraction cache (default true). Set false to force a full re-extraction
-   * that ignores AND does not write the cache — useful for testing or a forced refresh.
+   * that ignores AND does not write the cache - useful for testing or a forced refresh.
    */
   useCache?: boolean;
   /** Crawl at most this many sources (for small-scale/local test runs). */
@@ -77,7 +79,7 @@ const TITLE_STOPWORDS = new Set([
 ]);
 
 /**
- * Pick the candidate URL whose slug shares the most significant title tokens — used to
+ * Pick the candidate URL whose slug shares the most significant title tokens - used to
  * upgrade a listing-page gig to its specific event link. Returns undefined if no
  * confident match (so we drop a useless generic link rather than guess).
  */
@@ -121,8 +123,8 @@ function isStrictSubset(a: Set<string>, b: Set<string>): boolean {
 
 /**
  * Walks the curated source registry every run:
- *   Pass A — scrape each source's listing page(s) and discover event-detail URLs.
- *   Pass B — scrape those detail pages and extract structured, taste-filtered gigs.
+ *   Pass A - scrape each source's listing page(s) and discover event-detail URLs.
+ *   Pass B - scrape those detail pages and extract structured, taste-filtered gigs.
  * Then upserts into the CMS (create new, update existing auto gigs, never touch
  * hand-edited `manual` gigs). The run is non-destructive: a bad scrape night leaves
  * existing gigs in place rather than clearing the site.
@@ -178,7 +180,7 @@ export class SyncGigsCommand {
     );
 
     try {
-      // Opt-in destructive clear (never the default — a failed run must not empty the site)
+      // Opt-in destructive clear (never the default - a failed run must not empty the site)
       if (options.clearExisting) {
         logger.info("=== CLEARING EXISTING GIGS (explicit) ===");
         const deletedCount = await this.gigs.deleteAllGigs();
@@ -295,7 +297,7 @@ export class SyncGigsCommand {
 
       // Debounced prune: drop future, non-manual gigs not seen (updated) in the last
       // SYNC_PRUNE_GRACE_DAYS, so cancelled/removed gigs age out. Skipped entirely when
-      // this run stored nothing — a failed scrape must never wipe the site.
+      // this run stored nothing - a failed scrape must never wipe the site.
       if (env.SYNC_PRUNE_GRACE_DAYS > 0 && stats.gigsCreated + stats.gigsUpdated > 0) {
         const cutoff = new Date(now.getTime() - env.SYNC_PRUNE_GRACE_DAYS * 86_400_000);
         try {
@@ -355,7 +357,7 @@ export class SyncGigsCommand {
     }
 
     // Pass 2: within the same day+venue, collapse a billing that is a token-subset of a
-    // fuller one (e.g. "Megadeth" into "Megadeth / Sepultura") — keep the fuller title.
+    // fuller one (e.g. "Megadeth" into "Megadeth / Sepultura") - keep the fuller title.
     const groups = new Map<string, Gig[]>();
     for (const gig of byKey.values()) {
       const k = dayVenueKey(gig);
@@ -383,7 +385,7 @@ export class SyncGigsCommand {
     }
 
     // Pass 3: collapse a recurring series listed once per date under the same event page
-    // (identical normalized title + venue + specific event url across dates — e.g. a free
+    // (identical normalized title + venue + specific event url across dates - e.g. a free
     // summer music series) into ONE upcoming entry, keeping the earliest future date. The
     // shared specific url is a strong "same event" signal, so this won't merge two distinct
     // same-named shows that each have their own page.
@@ -429,7 +431,7 @@ export class SyncGigsCommand {
     stats.listingPagesScraped += okListings.length;
 
     // listingOnly sources (e.g. more.com, whose detail pages are gated) are
-    // extracted straight from the listing — no detail-page discovery/scraping.
+    // extracted straight from the listing - no detail-page discovery/scraping.
     if (source.listingOnly) {
       if (okListings.length === 0) {
         logger.warn({ source: source.id }, "No listing pages scraped for listing-only source");
@@ -437,7 +439,7 @@ export class SyncGigsCommand {
       }
 
       // Structured-listing sources (e.g. more.com) embed schema.org Event microdata in
-      // the listing HTML — parse it deterministically instead of Readability + LLM.
+      // the listing HTML - parse it deterministically instead of Readability + LLM.
       const parser = LISTING_PARSERS[source.id];
       if (parser) {
         const parsed = okListings.flatMap((p) =>
@@ -447,13 +449,14 @@ export class SyncGigsCommand {
           { source: source.id, gigs: parsed.length },
           "Extracted gigs from structured listing"
         );
-        return parsed;
+        // The structured listing carries no price - fill it from each event's detail page.
+        return this.enrichMissingPrices(source, parsed, okListings);
       }
 
       let gigs = await this.llm.extractGigsFromMultiplePages(okListings, dateRange);
 
       // The gig "url" from a listing is the generic listing page. Upgrade it to a
-      // per-event link found among the listing's hrefs (matched by title), or drop it —
+      // per-event link found among the listing's hrefs (matched by title), or drop it -
       // a useless category link is worse than none.
       const candidateLinks = okListings.flatMap((p) => p.links ?? []);
       const listingUrlSet = new Set(source.listingUrls);
@@ -469,7 +472,7 @@ export class SyncGigsCommand {
         const venueName = source.venueName;
         gigs = gigs.map((g) => ({ ...g, venueName }));
       }
-      return gigs;
+      return this.enrichMissingPrices(source, gigs, okListings);
     }
 
     // Discover event-detail URLs from the links on each listing page
@@ -524,6 +527,75 @@ export class SyncGigsCommand {
       gigs = gigs.map((g) => ({ ...g, venueName }));
     }
 
-    return gigs;
+    // Fill any still-missing prices from detail pages (reusing the HTML we just scraped).
+    return this.enrichMissingPrices(source, gigs, pagesToExtract);
+  }
+
+  /**
+   * Fill in missing prices from event detail pages - a site- and city-agnostic fallback.
+   * For each gig that has a specific event URL but no price, reuse the page HTML if we
+   * already scraped it this run, otherwise fetch it once over HTTP, then run the generic
+   * price extractor (JSON-LD offers -> microdata -> price/money elements). Deterministic,
+   * no LLM call. Mainly benefits listing-only sources whose listing has no price (e.g.
+   * more.com). Controlled by SYNC_ENRICH_PRICES.
+   */
+  private async enrichMissingPrices(
+    source: GigSource,
+    gigs: Gig[],
+    scrapedPages: ScrapedContent[]
+  ): Promise<Gig[]> {
+    if (!env.SYNC_ENRICH_PRICES) {
+      return gigs;
+    }
+
+    const listingUrlSet = new Set(source.listingUrls);
+    const needing = gigs.filter((g) => !g.price && !!g.url && !listingUrlSet.has(g.url));
+    if (needing.length === 0) {
+      return gigs;
+    }
+
+    // HTML already in hand from this run's scrapes (avoids re-fetching detail pages).
+    const htmlByUrl = new Map<string, string>();
+    for (const page of scrapedPages) {
+      if (page.success && page.rawHtml) {
+        htmlByUrl.set(page.url, page.rawHtml);
+      }
+    }
+
+    // Fetch only the detail pages we don't already have.
+    const toFetch = [...new Set(needing.map((g) => g.url!))].filter((u) => !htmlByUrl.has(u));
+    if (toFetch.length > 0) {
+      const fetched = await this.scraper.scrapeMany(toFetch);
+      for (const page of fetched) {
+        if (page.success && page.rawHtml) {
+          htmlByUrl.set(page.url, page.rawHtml);
+        }
+      }
+    }
+
+    let filled = 0;
+    const enriched = gigs.map((g) => {
+      if (g.price || !g.url) {
+        return g;
+      }
+      const html = htmlByUrl.get(g.url);
+      if (!html) {
+        return g;
+      }
+      const price = extractPriceFromHtml(html);
+      if (!price) {
+        return g;
+      }
+      filled++;
+      return { ...g, price };
+    });
+
+    if (toFetch.length > 0 || filled > 0) {
+      logger.info(
+        { source: source.id, missingPrice: needing.length, fetched: toFetch.length, filled },
+        "Filled missing gig prices from detail pages"
+      );
+    }
+    return enriched;
   }
 }

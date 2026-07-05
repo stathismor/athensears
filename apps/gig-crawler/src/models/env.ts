@@ -5,12 +5,12 @@ export const EnvSchema = z.object({
   STRAPI_API_URL: z.string().default("http://localhost:1337"),
   STRAPI_API_TOKEN: z.string(),
 
-  // Brave Web Search API (no longer used — discovery now driven by the curated
+  // Brave Web Search API (no longer used - discovery now driven by the curated
   // source registry in models/sources.ts; kept optional for backwards compat)
   BRAVE_API_KEY: z.string().optional(),
 
   // Google Gemini API.
-  // Default is the Flash-Lite tier — ~3x cheaper input tokens than Flash and
+  // Default is the Flash-Lite tier - ~3x cheaper input tokens than Flash and
   // adequate for this structured extraction task. If you notice the taste filter
   // / genre labelling degrading, override GEMINI_MODEL back to "gemini-flash-latest".
   GEMINI_API_KEY: z.string(),
@@ -29,7 +29,7 @@ export const EnvSchema = z.object({
 
   // Gemini rate limiting & chunking. Defaults suit a paid tier (gemini-2.5/flash
   // allow ~1000 RPM); the inter-chunk delay is 60000/RPM ms. On the free tier,
-  // lower GEMINI_RATE_LIMIT_RPM (~10) — the 429 backoff handles overruns either way.
+  // lower GEMINI_RATE_LIMIT_RPM (~10) - the 429 backoff handles overruns either way.
   GEMINI_RATE_LIMIT_RPM: z.coerce.number().default(120),
   GEMINI_CHUNK_SIZE: z.coerce.number().default(6),
 
@@ -47,6 +47,16 @@ export const EnvSchema = z.object({
   // Max event-detail pages to scrape per source per run (bounds cost/time).
   SYNC_MAX_DETAIL_PER_SOURCE: z.coerce.number().default(30),
 
+  // Fill in a gig's price from its event detail page when structured extraction found
+  // none - site-agnostic (JSON-LD offers, microdata, then price/money elements). Reuses
+  // already-scraped page HTML where possible, else does one HTTP fetch per priceless
+  // gig; no LLM tokens. Mainly benefits listing-only sources (e.g. more.com) whose
+  // listing carries no price. Set false to disable.
+  SYNC_ENRICH_PRICES: z
+    .string()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
+
   // Prune auto gigs not seen (updated) by a crawl in this many days. Acts as a
   // debounce: a gig must be missed by this many consecutive runs before removal,
   // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.
@@ -54,7 +64,7 @@ export const EnvSchema = z.object({
 
   // Extraction cache. Skips the Gemini extraction call for a scraped page whose
   // content is byte-identical to a recent run (event detail pages rarely change),
-  // replaying the cached gigs instead — the dominant cost saver. Persisted in the
+  // replaying the cached gigs instead - the dominant cost saver. Persisted in the
   // Strapi `crawl-cache` single-type (Postgres), so no files/volumes are involved;
   // the crawler's Strapi API token needs find+update on it. Entries older than
   // CRAWLER_CACHE_TTL_DAYS are re-extracted regardless of hash, so far-future events
