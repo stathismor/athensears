@@ -268,7 +268,10 @@ export class StrapiAdapter implements GigsPort {
     for (let guard = 0; guard < 100; guard++) {
       const response = await this.client.get("/api/gigs", {
         params: {
-          "filters[manual][$ne]": true,
+          // "not manual" = manual is false OR null. A bare `$ne: true` misses NULL rows
+          // (SQL: NULL != true is unknown), so legacy null-manual gigs would never prune.
+          "filters[$or][0][manual][$eq]": false,
+          "filters[$or][1][manual][$null]": true,
           "filters[date][$gte]": `${today}T00:00:00.000Z`,
           "filters[updatedAt][$lt]": notSeenSince.toISOString(),
           "pagination[pageSize]": 50,

@@ -35,6 +35,17 @@ export default {
       }
     }
 
+    // Normalize any legacy gigs with manual = null to false. Null predates the field
+    // default and slips past "not manual" filters (SQL: NULL != true is unknown), so
+    // such rows never prune. Idempotent - a no-op once every row has a real boolean.
+    const fixed = await strapi.db.query('api::gig.gig').updateMany({
+      where: { manual: { $null: true } },
+      data: { manual: false },
+    });
+    if (fixed?.count) {
+      strapi.log.info(`Backfilled manual=false on ${fixed.count} gig(s)`);
+    }
+
     // Seed demo data only when explicitly enabled (SEED_SAMPLE_DATA=true) and the DB is
     // empty. Off by default so a fresh production deploy isn't populated with sample gigs
     // before the crawler's first run.

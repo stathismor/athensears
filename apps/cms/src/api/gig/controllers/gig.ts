@@ -3,10 +3,12 @@ import { factories } from '@strapi/strapi';
 export default factories.createCoreController('api::gig.gig', ({ strapi }) => ({
   async deleteAll(ctx) {
     try {
-      // Fetch all non-manual gigs (only id for efficiency)
+      // Fetch all non-manual gigs (only id for efficiency). "Not manual" means manual
+      // is false OR null - a bare `$ne: true` misses NULL rows (SQL: NULL != true is
+      // unknown), leaving legacy null-manual gigs undeletable.
       const entities = await strapi.db.query('api::gig.gig').findMany({
         select: ['id'],
-        where: { manual: { $ne: true } },
+        where: { $or: [{ manual: false }, { manual: null }] },
       });
 
       // Delete all gigs individually
