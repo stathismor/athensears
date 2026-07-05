@@ -8,10 +8,11 @@ export const GigSchema = z.object({
   price: z.string().optional(),
   url: z.string().optional(),
   /**
-   * Up to 3 genres (most to least relevant). Also the taste backstop: an empty array
-   * means the act failed the genre filter and the gig is dropped. Stored, not rendered.
+   * Up to 3 genres (most to least relevant). Always present: an empty array means the
+   * act failed the genre filter, and such gigs are dropped before storage - so every
+   * Gig that survives carries at least one. Stored, not rendered.
    */
-  genres: z.array(z.string()).optional(),
+  genres: z.array(z.string()),
   imageUrl: z.string().optional(),
 });
 
@@ -25,7 +26,10 @@ export const StrapiGigSchema = z.object({
     description: z.string().optional(),
     price: z.string().optional(),
     url: z.string().optional(),
-    genres: z.array(z.string()).optional(),
+    genres: z.array(z.string()),
+    // Always written false by the crawler so the column is never null (null slips past
+    // "not manual" filters). Only ever called for auto gigs; manual gigs are skipped upstream.
+    manual: z.boolean(),
     // imageUrl removed - Strapi schema doesn't support it
   }),
 });
@@ -42,6 +46,7 @@ export function toStrapiGig(gig: Gig, venueId: number): StrapiGig {
       price: gig.price,
       url: gig.url,
       genres: gig.genres,
+      manual: false,
       // imageUrl intentionally excluded - Strapi schema doesn't support it
     },
   };
