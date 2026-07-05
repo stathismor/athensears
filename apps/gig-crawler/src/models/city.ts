@@ -1,5 +1,5 @@
 /**
- * City configuration — the single place that makes the crawler city-specific.
+ * City configuration - the single place that makes the crawler city-specific.
  *
  * Everything else (scraping, extraction, dedup, title cleaning) is city-agnostic and
  * reads from the ACTIVE_CITY below. To target another city, add a CityConfig and point

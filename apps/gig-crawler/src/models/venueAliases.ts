@@ -63,7 +63,7 @@ const VENUE_ALIASES: Record<string, string> = {
   "gazarte main stage": "Gazarte",
   "gazarte roof stage": "Gazarte",
 
-  // Release Athens festival (at Plateia Nerou, Palaio Faliro) — aggregators label it
+  // Release Athens festival (at Plateia Nerou, Palaio Faliro) - aggregators label it
   // variously by the square or the neighborhood; collapse them onto the festival.
   "plateia nerou": "Release Athens",
   "πλατεία νερού": "Release Athens",

@@ -21,7 +21,7 @@ try {
   // surface as an error the user has to refresh past.
   gigs = await fetchGigs(strapiUrl);
   // Cache successful responses only (5 min at the CDN/proxy) so we don't hit
-  // Strapi on every request — and never cache the error page below.
+  // Strapi on every request - and never cache the error page below.
   Astro.response.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
 } catch (e) {
   error = 'Could not load gigs. Make sure the CMS is running.';
@@ -36,7 +36,7 @@ try {
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <meta name="description" content="Curated gigs in Athens, Greece" />
-    <title>Athens Ears — Curated gigs in Athens</title>
+    <title>Athens Ears - Curated gigs in Athens</title>
   </head>
   <body class="min-h-screen bg-paper text-ink">
     <div class="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-10 lg:max-w-7xl lg:px-8">

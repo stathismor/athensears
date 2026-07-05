@@ -6,7 +6,7 @@ Monorepo for Athens live music events platform.
 
 - **CMS**: Strapi v5 (PostgreSQL)
 - **Frontend**: Astro v5 (server-rendered via `@astrojs/node`) + Tailwind CSS v4
-- **Gig Crawler**: Node.js service — crawls a curated registry of Athens venues + ticketing pages (`apps/gig-crawler/src/models/sources.ts`) and extracts gigs with Google Gemini
+- **Gig Crawler**: Node.js service - crawls a curated registry of Athens venues + ticketing pages (`apps/gig-crawler/src/models/sources.ts`) and extracts gigs with Google Gemini
 - **Package Manager**: pnpm with workspaces
 - **Node.js**: v24.13.0 (pinned via `.node-version`)
 

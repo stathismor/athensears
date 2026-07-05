@@ -33,7 +33,7 @@ const GREEK_CONFUSABLES: Record<string, string> = {
  * diacritics, lowercase, drop punctuation and separators (so "A & B", "A / B", "A - B" and
  * "Motörhead"/"Motorhead" all collapse), and squeeze whitespace. Used both to dedupe within
  * a run and to match a gig against an existing CMS row, so script/accent/punctuation variants
- * from different sources resolve to the same event. Matching-only — display titles are kept.
+ * from different sources resolve to the same event. Matching-only - display titles are kept.
  */
 export function normalizeTitle(title: string): string {
   return title

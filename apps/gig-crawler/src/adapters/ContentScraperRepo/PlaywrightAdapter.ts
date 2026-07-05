@@ -198,7 +198,7 @@ export class PlaywrightAdapter implements ScraperPort {
 
     if (httpFirst) {
       // These hosts block/stall headless Chromium by definition, so a browser
-      // fallback would just waste ~60s timing out — return the HTTP result as-is.
+      // fallback would just waste ~60s timing out - return the HTTP result as-is.
       return this.scrapeViaHttp(url);
     }
 
@@ -212,7 +212,7 @@ export class PlaywrightAdapter implements ScraperPort {
     return viaHttp.success ? viaHttp : viaBrowser;
   }
 
-  /** Plain HTTP fetch with a real-browser UA — for server-rendered/anti-headless sites. */
+  /** Plain HTTP fetch with a real-browser UA - for server-rendered/anti-headless sites. */
   private async scrapeViaHttp(url: string): Promise<ScrapedContent> {
     logger.info({ url }, "Scraping URL (http)");
     try {
@@ -261,7 +261,7 @@ export class PlaywrightAdapter implements ScraperPort {
     }
   }
 
-  /** Headless-browser scrape — for JS-rendered sites. */
+  /** Headless-browser scrape - for JS-rendered sites. */
   private async scrapeViaBrowser(url: string): Promise<ScrapedContent> {
     logger.info({ url }, "Scraping URL (browser)");
 
@@ -270,7 +270,7 @@ export class PlaywrightAdapter implements ScraperPort {
 
     try {
       // Load fast on DOMContentLoaded (our sources are server-rendered), then give
-      // lazy content a brief moment to settle — but cap that at 6s instead of paying
+      // lazy content a brief moment to settle - but cap that at 6s instead of paying
       // the full 30s networkidle timeout that rarely settles (analytics/ads keep it busy).
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
       await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});

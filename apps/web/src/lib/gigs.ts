@@ -25,8 +25,8 @@ export interface StrapiResponse {
 /**
  * Fetch upcoming gigs from Strapi, retrying a few times on failure.
  *
- * The CMS can be briefly unreachable even when healthy — a redeploy, or a
- * cold/waking service returning a 502 — where the very next request succeeds
+ * The CMS can be briefly unreachable even when healthy - a redeploy, or a
+ * cold/waking service returning a 502 - where the very next request succeeds
  * (the classic "works on refresh"). Retrying with a short backoff turns that
  * transient blip into a slightly slower first load instead of an error page.
  * Each attempt is bounded by a timeout so a genuine hang can't stall the request.
@@ -84,7 +84,7 @@ export function formatDate(dateStr: string): { weekday: string; day: string; mon
 }
 
 // Greek maps the tonos (´) onto accented vowels; the uppercase convention drops
-// it (Κέντρο → ΚΕΝΤΡΟ). Map each accented vowel to its plain form — dialytika
+// it (Κέντρο → ΚΕΝΤΡΟ). Map each accented vowel to its plain form - dialytika
 // (ϊ ϋ) is preserved, and Latin accents are left untouched.
 const GREEK_TONOS: Record<string, string> = {
   ά: 'α',

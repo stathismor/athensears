@@ -4,8 +4,8 @@
 
 Athens Ears is a curated live music listing for Athens, Greece. Every night it crawls a
 hand-maintained set of known venues and ticketing pages, extracts upcoming gigs in genres like
-rock, indie, post-punk, metal, post-rock, jazz, folk and experimental — strictly filtering out
-mainstream pop, commercial EDM, hip-hop, tributes, comedy/theatre and Greek popular music —
+rock, indie, post-punk, metal, post-rock, jazz, folk and experimental - strictly filtering out
+mainstream pop, commercial EDM, hip-hop, tributes, comedy/theatre and Greek popular music -
 and publishes them to a server-rendered site.
 
 ## Monorepo Structure
@@ -14,9 +14,9 @@ pnpm 10 workspaces with three apps:
 
 ```
 apps/
-├── gig-crawler/   # Node.js/Express — crawls curated sources, extracts gigs
-├── cms/           # Strapi 5 — stores venues and gigs in PostgreSQL
-└── web/           # Astro 5 (SSR) — server-rendered listing of upcoming gigs
+├── gig-crawler/   # Node.js/Express - crawls curated sources, extracts gigs
+├── cms/           # Strapi 5 - stores venues and gigs in PostgreSQL
+└── web/           # Astro 5 (SSR) - server-rendered listing of upcoming gigs
 ```
 
 ## Services
@@ -27,12 +27,12 @@ Express HTTP server that runs the sync pipeline on a cron schedule (daily at 02:
 by default). Exposes endpoints for manual sync trigger (`POST /api/sync`), sync status, health
 check, and bulk delete.
 
-Discovery is driven by a **curated source registry** (`src/models/sources.ts`) — not open-web
+Discovery is driven by a **curated source registry** (`src/models/sources.ts`) - not open-web
 search. Each source is a known Athens venue or a ticketing aggregator with one or more
 `listingUrls` pointing at its upcoming-events page. This makes every run deterministic, cheap
 and high signal. To add a venue, add an entry to the registry.
 
-Built on a hexagonal architecture — the core `SyncGigsCommand` depends only on three port
+Built on a hexagonal architecture - the core `SyncGigsCommand` depends only on three port
 interfaces (`ScraperPort`, `LLMPort`, `GigsPort`), with concrete adapters injected at startup:
 
 | Port | Adapter | External Service |
@@ -45,9 +45,9 @@ interfaces (`ScraperPort`, `LLMPort`, `GigsPort`), with concrete adapters inject
 
 Headless CMS backed by PostgreSQL 16. Content types:
 
-- **Gig** — title, date, time_display, price, description, url, **genre**, manual (boolean), venue (relation)
-- **Venue** — name, address, website, neighborhood
-- **Crawl Cache** (single-type) — one internal JSON blob (`data`) holding the crawler's
+- **Gig** - title, date, time_display, price, description, url, **genre**, manual (boolean), venue (relation)
+- **Venue** - name, address, website, neighborhood
+- **Crawl Cache** (single-type) - one internal JSON blob (`data`) holding the crawler's
   extraction cache; written by the crawler via its API token, not exposed publicly
 
 On bootstrap, grants public read access to both content types and seeds sample data if the
@@ -63,7 +63,7 @@ tick `manual` so the nightly run leaves it alone.
 Server-rendered site (`@astrojs/node`, standalone) styled with Tailwind CSS. Fetches future
 gigs from Strapi **per request** (`/api/gigs?populate=venue&sort=date:asc`), groups them by
 month, and renders a responsive listing. Because it renders live, new nightly gigs and manual
-CMS edits appear immediately — no rebuild. A `Cache-Control: max-age=300` header keeps Strapi
+CMS edits appear immediately - no rebuild. A `Cache-Control: max-age=300` header keeps Strapi
 from being hit on every request. Server-side fetches prefer `STRAPI_INTERNAL_URL` (private
 networking) and fall back to `PUBLIC_STRAPI_URL`.
 
@@ -73,12 +73,12 @@ The crawler walks the registry source by source:
 
 ```
 For each enabled source in GIG_SOURCES:
-  Pass A — Listing
+  Pass A - Listing
     Playwright scrapes the source's listingUrl(s)
     → Gemini identifies event-detail URLs among the page links
     → deduplicated, capped per source
 
-  Pass B — Detail extraction
+  Pass B - Detail extraction
     Playwright scrapes detail pages (+ the listing page itself for venues)
     → extracts JSON-LD, OpenGraph, Readability text
     → Gemini batch-extracts structured gigs with a strict taste filter,
@@ -93,7 +93,7 @@ Then, across all sources:
   → upsert into Strapi: create new, update existing auto gigs, skip manual gigs
 ```
 
-The run is **non-destructive** — it never clears-then-rebuilds, so a failed scrape night
+The run is **non-destructive** - it never clears-then-rebuilds, so a failed scrape night
 leaves existing gigs in place rather than emptying the site.
 
 ## Third-Party Services
@@ -107,13 +107,13 @@ leaves existing gigs in place rather than emptying the site.
 
 ## Deduplication & idempotency
 
-- **Curated registry** — discovery is limited to known-good sources, so noise never enters.
-- **Per-source venue stamping** — venue sources assign their canonical venue name directly,
+- **Curated registry** - discovery is limited to known-good sources, so noise never enters.
+- **Per-source venue stamping** - venue sources assign their canonical venue name directly,
   eliminating venue-name drift / duplicate venues.
-- **Upsert on title + date** — `findGig(title, date)` (case-insensitive, same-day) merges the
+- **Upsert on title + date** - `findGig(title, date)` (case-insensitive, same-day) merges the
   same gig found via multiple sources; existing auto gigs are updated, manual gigs untouched.
-- **Genre backstop** — gigs the model marks `reject` (or leaves ungenred) are dropped in code.
-- **Prompt-level** — extraction collapses multi-band/festival lineups into one event.
+- **Genre backstop** - gigs the model marks `reject` (or leaves ungenred) are dropped in code.
+- **Prompt-level** - extraction collapses multi-band/festival lineups into one event.
 
 Venue normalization adds another layer: an alias map (`venueAliases.ts`) canonicalizes names
 like "gagarin" → "Gagarin 205" for aggregator-sourced gigs, with an in-memory cache.
@@ -122,9 +122,9 @@ like "gagarin" → "Gagarin 205" for aggregator-sourced gigs, with an in-memory 
 
 Gemini token spend (extraction is >95% of it) is bounded by:
 
-- **Model tier** — `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` (cheapest). Bump to
+- **Model tier** - `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` (cheapest). Bump to
   `gemini-flash-latest` if extraction/taste-filter quality regresses.
-- **Extraction cache** (`PageExtractionCache`) — each scraped page's prompt content is hashed
+- **Extraction cache** (`PageExtractionCache`) - each scraped page's prompt content is hashed
   (SHA-256 of the exact `{url,content}` string sent to the model); a hit (same hash, within
   `CRAWLER_CACHE_TTL_DAYS`) replays stored gigs instead of calling Gemini. Since event pages
   rarely change, most nights re-pay for almost nothing. The batch extraction prompt returns
@@ -132,21 +132,21 @@ Gemini token spend (extraction is >95% of it) is bounded by:
   against the (daily-shifting) date window on replay; a TTL forces periodic re-extraction so
   far-future events entering the window self-heal.
   - **Storage:** the whole `url → {hash,gigs}` map is one JSON blob in the Strapi `crawl-cache`
-    single-type (Postgres) — no files or volumes. The crawler reaches it over REST with its
+    single-type (Postgres) - no files or volumes. The crawler reaches it over REST with its
     existing token (needs `crawl-cache` find + update); `StrapiCacheStore` does one GET to load
     and one PUT to save per run. Loaded once at sync start, flushed once at the end.
   - **Fail-safe:** if the cache is unreachable or `CRAWLER_CACHE_ENABLED=false`, every lookup
-    misses and nothing is written — the run just makes more Gemini calls, never breaks.
-- **Volume knobs** — `SYNC_MAX_DETAIL_PER_SOURCE` (pages/source), `GEMINI_CHUNK_SIZE`
+    misses and nothing is written - the run just makes more Gemini calls, never breaks.
+- **Volume knobs** - `SYNC_MAX_DETAIL_PER_SOURCE` (pages/source), `GEMINI_CHUNK_SIZE`
   (pages/call), `CRON_SCHEDULE` (run frequency).
 
 ## Architecture Patterns
 
-- **Hexagonal (Ports & Adapters)** — domain logic in `SyncGigsCommand` depends on port
+- **Hexagonal (Ports & Adapters)** - domain logic in `SyncGigsCommand` depends on port
   interfaces; adapters are injected at the composition root (`index.ts`)
-- **Command pattern** — `SyncGigsCommand.execute()` encapsulates the full sync, returns `SyncStats`
-- **Constructor injection** — all adapters injected into the command; fully mockable for testing
-- **Schema-first validation** — Zod schemas define all external boundaries (API responses, env
+- **Command pattern** - `SyncGigsCommand.execute()` encapsulates the full sync, returns `SyncStats`
+- **Constructor injection** - all adapters injected into the command; fully mockable for testing
+- **Schema-first validation** - Zod schemas define all external boundaries (API responses, env
   vars, model shapes) with `z.infer<>` for type derivation
 
 ## Infrastructure

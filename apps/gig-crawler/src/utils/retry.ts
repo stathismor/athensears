@@ -73,7 +73,7 @@ export async function retry<T>(
         onError(error, attempt);
       }
 
-      // Fail fast on non-retryable errors (4xx other than 429) — retrying can't help.
+      // Fail fast on non-retryable errors (4xx other than 429) - retrying can't help.
       if (!isRetryable(error)) {
         logger.error({ attempt, error }, "Non-retryable error, aborting retries");
         throw error;

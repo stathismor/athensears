@@ -10,7 +10,7 @@ import { StrapiCacheStore } from "./StrapiCacheStore.js";
  *
  * Every nightly run would otherwise re-send every (mostly-unchanged) event page to
  * Gemini. This cache lets the crawler skip the extraction call for a page whose
- * content hash matches a recent run and replay the stored gigs — the single biggest
+ * content hash matches a recent run and replay the stored gigs - the single biggest
  * cost lever, since extraction is >95% of token spend.
  *
  * In-memory it is a `url -> { hash, extractedAt, gigs }` map. Persistence is delegated
@@ -20,12 +20,12 @@ import { StrapiCacheStore } from "./StrapiCacheStore.js";
  *
  * Fail-safe: if the backing store is disabled or unreachable, the cache reports every
  * lookup as a miss and never writes, so behaviour is identical to a cache-less crawler
- * — a cache outage slows a run (more Gemini calls) but never breaks it.
+ * - a cache outage slows a run (more Gemini calls) but never breaks it.
  *
  * Correctness notes:
  * - Stored gigs are the model's already-date-filtered output. Callers MUST re-apply
  *   the current date window to replayed gigs (the window shifts daily); the
- *   GeminiAdapter does — this cache is date-agnostic.
+ *   GeminiAdapter does - this cache is date-agnostic.
  * - Entries carry an extractedAt timestamp; reads older than CRAWLER_CACHE_TTL_DAYS
  *   miss (and are pruned on load), so far-future events entering the window and any
  *   missed page edits self-heal within the TTL even if the page bytes never change.
@@ -64,7 +64,7 @@ export class PageExtractionCache {
 
   /**
    * Prepare the cache for a run: load from the backend and prune expired entries. Must
-   * be awaited once before extraction. On any failure — or when `useCache` is false —
+   * be awaited once before extraction. On any failure - or when `useCache` is false -
    * the cache stays unavailable (all misses, no writes) so the run proceeds without it.
    * Resetting `available`/`record` here matters because the adapter is a long-lived
    * singleton: a bypass run must not see the previous run's in-memory entries.
@@ -107,7 +107,7 @@ export class PageExtractionCache {
       );
     } catch (error) {
       this.available = false;
-      logger.warn({ error }, "Failed to load extraction cache — this run proceeds without it");
+      logger.warn({ error }, "Failed to load extraction cache - this run proceeds without it");
     }
   }
 

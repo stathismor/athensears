@@ -98,7 +98,7 @@ app.post("/api/sync", (req, res) => {
   });
 });
 
-// Dry-run delete endpoint — shows what would be deleted, then deletes
+// Dry-run delete endpoint - shows what would be deleted, then deletes
 app.post("/api/gigs/delete", async (req, res) => {
   if (env.SYNC_API_KEY) {
     const auth = req.headers.authorization;

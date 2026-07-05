@@ -7,16 +7,16 @@ no longer uses Brave; the only external API key you need is **Gemini**.
 > Any Docker host works (Render, Fly, a VPS with docker-compose). Steps below assume Railway.
 
 ## 0. Prerequisites
-- A **Gemini API key** — https://aistudio.google.com/apikey
+- A **Gemini API key** - https://aistudio.google.com/apikey
 - `openssl` (to generate Strapi secrets)
 - Railway account + the repo connected to it
 
 ## 1. Postgres
 Add a **PostgreSQL** database to the Railway project. Note its connection vars
-(`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`) — Railway exposes them as
+(`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`) - Railway exposes them as
 reference variables you can wire into the CMS.
 
-## 2. CMS (Strapi) — `apps/cms/Dockerfile`
+## 2. CMS (Strapi) - `apps/cms/Dockerfile`
 Create a service from the repo; set its config/`railway.json` path is already
 `apps/cms/Dockerfile`. Environment:
 
@@ -40,16 +40,16 @@ ENCRYPTION_KEY=<rand>
 ```
 
 Deploy. On first boot Strapi creates the tables (including the `genre` column) and grants
-**public read** on gigs/venues automatically. Do **not** set `SEED_SAMPLE_DATA` — demo data
+**public read** on gigs/venues automatically. Do **not** set `SEED_SAMPLE_DATA` - demo data
 stays off so the site isn't seeded with placeholder gigs.
 
 Then:
 1. Open the CMS public URL `/admin`, **register the admin** account.
 2. **Settings → API Tokens → Create**: name `gig-crawler`, token type **Full access**
-   (simplest — the crawler needs gig create/find/update + venue create/find, and delete for
+   (simplest - the crawler needs gig create/find/update + venue create/find, and delete for
    pruning). Copy the token now (shown once).
 
-## 3. Crawler — `apps/gig-crawler/Dockerfile`
+## 3. Crawler - `apps/gig-crawler/Dockerfile`
 Create a service. Environment:
 
 ```
@@ -70,7 +70,7 @@ It has a `/health` check and an embedded nightly cron. Trigger the first run man
 `curl -XPOST https://<crawler-url>/api/sync` (add `-H "Authorization: Bearer $SYNC_API_KEY"`
 if you set one). Watch logs; it should finish in a few minutes with `errors: 0`.
 
-## 4. Web (SSR) — `apps/web/Dockerfile`
+## 4. Web (SSR) - `apps/web/Dockerfile`
 Create a service. Environment:
 
 ```
@@ -80,7 +80,7 @@ STRAPI_INTERNAL_URL=http://${{cms.RAILWAY_PRIVATE_DOMAIN}}:1337   # server-side 
 PUBLIC_STRAPI_URL=https://<cms public url>                        # fallback
 ```
 
-Railway sets `PORT`; the Astro node server binds it. Add a public domain to this service —
+Railway sets `PORT`; the Astro node server binds it. Add a public domain to this service -
 that's the site. It server-renders from Strapi each request, so new nightly gigs and any
 manual CMS edits appear on refresh with no rebuild.
 

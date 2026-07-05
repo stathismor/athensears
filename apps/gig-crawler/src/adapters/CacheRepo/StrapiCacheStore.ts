@@ -7,7 +7,7 @@ import { retry } from "../../utils/retry.js";
 /**
  * Persists the extraction cache as a single JSON blob in Strapi's `crawl-cache`
  * single-type (backed by the same Postgres the CMS uses). The crawler reaches it
- * over the REST API with the token it already holds — no DB driver, no volume, no
+ * over the REST API with the token it already holds - no DB driver, no volume, no
  * extra credentials. The whole record is one `data` JSON field: one GET to load,
  * one PUT to save per run (the cache is small and the crawler is single-instance).
  */

@@ -1,19 +1,19 @@
 /**
- * Curated source registry — the backbone of discovery.
+ * Curated source registry - the backbone of discovery.
  *
  * Instead of open-web search (which returns SEO spam, aggregators and mainstream
  * pop), the crawler walks this hand-maintained list of known Athens venues and
  * ticketing pages. This makes each nightly run deterministic, cheap and high
  * signal. To add a venue, add an entry here.
  *
- * Each source exposes one or more `listingUrls` — pages that list UPCOMING events.
+ * Each source exposes one or more `listingUrls` - pages that list UPCOMING events.
  * For `type: "venue"` sources we already know the venue, so `venueName` is stamped
  * onto every gig extracted from it (this eliminates venue-name drift / duplicate
  * venues). For `type: "aggregator"` sources the venue varies per event, so it is
  * extracted by the LLM and normalised via `normalizeVenueName()`.
  *
  * URLs were verified on 2026-06-29. Only enable a source whose listing page was
- * confirmed to load and show upcoming events — a dead listing URL silently drops a
+ * confirmed to load and show upcoming events - a dead listing URL silently drops a
  * whole venue. Unverified/stale/blocked ones are left `enabled: false` with a note.
  */
 export interface GigSource {
@@ -24,9 +24,9 @@ export interface GigSource {
   type: "venue" | "aggregator";
   /** page(s) that list upcoming events */
   listingUrls: string[];
-  /** for type:"venue" — assigned to every gig from this source */
+  /** for type:"venue" - assigned to every gig from this source */
   venueName?: string;
-  /** for venue sources — Athens neighborhood (e.g. "Gazi", "Exarchia") */
+  /** for venue sources - Athens neighborhood (e.g. "Gazi", "Exarchia") */
   neighborhood?: string;
   /** venue official homepage, used as a fallback link on the site */
   website?: string;
@@ -76,7 +76,7 @@ export const GIG_SOURCES: GigSource[] = [
     venueName: "Gazarte",
     neighborhood: "Gazi",
     website: "https://www.gazarte.gr",
-    // Broad programming (jazz/world/indie) — leans on the taste filter.
+    // Broad programming (jazz/world/indie) - leans on the taste filter.
     listingUrls: ["https://www.gazarte.gr/en/cultural/"],
   },
   {
@@ -91,7 +91,7 @@ export const GIG_SOURCES: GigSource[] = [
   {
     // Major Athens summer festival at Plateia Nerou. Clean per-event detail pages
     // (/event/<slug>/), verified scrapeable over HTTP 2026-06-29. Aggregators list
-    // these as "Plateia Nerou" — aliased to "Release Athens" so the copies merge.
+    // these as "Plateia Nerou" - aliased to "Release Athens" so the copies merge.
     id: "release-athens",
     name: "Release Athens (Plateia Nerou)",
     type: "venue",
@@ -101,7 +101,7 @@ export const GIG_SOURCES: GigSource[] = [
     listingUrls: ["https://www.releaseathens.gr/en/"],
   },
 
-  // ───────── Venues with no usable official page — verified via aggregator ─────────
+  // ───────── Venues with no usable official page - verified via aggregator ─────────
   // listingUrl is a venue-scoped aggregator page; venueName is stamped so the venue
   // is always correct regardless of how the aggregator labels it.
   {
@@ -138,23 +138,23 @@ export const GIG_SOURCES: GigSource[] = [
   {
     // Verified in the previous implementation and re-verified 2026-06-29.
     id: "ticketservices",
-    name: "Ticket Services — Live Concerts",
+    name: "Ticket Services - Live Concerts",
     type: "aggregator",
     listingUrls: ["https://www.ticketservices.gr/en/LiveConcerts/"],
   },
   {
     // Editorial Athens concert agenda with the best area/genre filtering.
     id: "athinorama",
-    name: "Athinorama — Music Guide",
+    name: "Athinorama - Music Guide",
     type: "aggregator",
     listingUrls: ["https://www.athinorama.gr/music/guide"],
   },
   {
-    // Bios group's unified events page — covers Bios.Romantso, Bios.Pireos84, PLEX.
+    // Bios group's unified events page - covers Bios.Romantso, Bios.Pireos84, PLEX.
     // Treated as an aggregator so the per-event sub-venue is extracted + normalised
     // (avoids double-stamping the shared page as a single venue).
     id: "bios-group",
-    name: "Bios — Romantso / Pireos84 / PLEX",
+    name: "Bios - Romantso / Pireos84 / PLEX",
     type: "aggregator",
     listingUrls: ["https://bios.gr/bios/tickets/"],
   },
@@ -163,7 +163,7 @@ export const GIG_SOURCES: GigSource[] = [
     // plain HTTP (handled by the scraper's http-first path), but individual event
     // pages sit behind a Queue-It waiting room, so we extract from the listing only.
     id: "more-com",
-    name: "more.com — Music",
+    name: "more.com - Music",
     type: "aggregator",
     listingUrls: ["https://www.more.com/gr-en/tickets/music/"],
     listingOnly: true,
@@ -190,7 +190,7 @@ export const GIG_SOURCES: GigSource[] = [
     neighborhood: "Monastiraki",
     website: "https://sixdogs.gr",
     // /calendar is the agenda but Cloudflare returns 403 to plain fetch. Our
-    // Playwright is a real browser and may pass — try enabling and watch the logs.
+    // Playwright is a real browser and may pass - try enabling and watch the logs.
     listingUrls: ["https://sixdogs.gr/calendar"],
     enabled: false,
   },

@@ -52,7 +52,7 @@ interface DateRange {
  * Deterministically extract the active city's gigs from a more.com music listing page.
  *
  * more.com is a legacy, server-rendered ASP.NET site: the listing HTML embeds every event
- * as schema.org microdata — `<article itemtype=".../Event">` carrying startDate, venue
+ * as schema.org microdata - `<article itemtype=".../Event">` carrying startDate, venue
  * (`#PlayVenue`), url and image metas, with genre in `music<genre>` class tokens and
  * region in an `area<N>` class. Its event *detail* pages sit behind a Queue-It waiting
  * room, so we take everything from the (open, plain-HTTP) listing.

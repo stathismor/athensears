@@ -66,19 +66,19 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Normalize an event title to the clean act name — city- and source-agnostic.
+ * Normalize an event title to the clean act name - city- and source-agnostic.
  *
  * Strips, in order:
  *  1. a leading prefix that only repeats the venue/festival (+ optional year), e.g.
  *     "Release Athens 2026 / Pantera" -> "Pantera" (only when `venueName` is given);
  *  2. a trailing venue/location suffix: " at X", " @ X", or the Greek locative
- *     " στα/στο/στη/στην/στον/στις X" — e.g. "Artist at Island" / "Μπάντα στα Αστέρια";
- *  3. a trailing "(live) in/at <city>" tail — e.g. "Elder (USA) live in Athens" (driven
+ *     " στα/στο/στη/στην/στον/στις X" - e.g. "Artist at Island" / "Μπάντα στα Αστέρια";
+ *  3. a trailing "(live) in/at <city>" tail - e.g. "Elder (USA) live in Athens" (driven
  *     by `cityAliases` so it generalizes to any city);
  *  4. a trailing country tag: "(US)", "(USA)", "(FR)";
  *  5. trailing subtitle noise: anniversary tags, quoted show names, "| …" tails.
  *
- * Co-headline bills ("Megadeth / Sepultura", "A • B • C") are preserved — only
+ * Co-headline bills ("Megadeth / Sepultura", "A • B • C") are preserved - only
  * venue-repeating prefixes and after-the-act location suffixes are removed.
  */
 export function cleanEventTitle(
