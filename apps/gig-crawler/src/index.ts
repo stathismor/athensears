@@ -68,6 +68,14 @@ app.post("/api/sync", (req, res) => {
   const maxSources = req.query.maxSources
     ? parseInt(req.query.maxSources as string, 10)
     : undefined;
+  // Test a specific source (or a few): ?sources=more-com or ?sources=more-com,fuzz-club.
+  // Pick a deterministic source like more-com to test without spending on the LLM.
+  const sources = req.query.sources
+    ? (req.query.sources as string)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
 
   if (isSyncRunning) {
     return res.status(409).json({
@@ -81,6 +89,7 @@ app.post("/api/sync", (req, res) => {
     monthsAhead,
     useCache,
     maxSources,
+    sources,
   };
   logger.info({ options }, "Manual sync triggered via API");
 
@@ -178,7 +187,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: "/api/sync (POST) - Start background sync. Query params: clear=true, monthsAhead=N, cache=false|force=true (bypass cache), maxSources=N",
+      sync: "/api/sync (POST) - Start background sync. Query params: clear=true, monthsAhead=N, cache=false|force=true (bypass cache), maxSources=N, sources=more-com,fuzz-club (restrict to specific source ids)",
       syncStatus: "/api/sync/status (GET) - Check sync status",
     },
   });

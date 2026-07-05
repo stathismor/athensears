@@ -35,6 +35,12 @@ export interface SyncOptions {
   useCache?: boolean;
   /** Crawl at most this many sources (for small-scale/local test runs). */
   maxSources?: number;
+  /**
+   * Restrict the run to these source ids (e.g. ["more-com"]). Lets you test a single
+   * source cheaply - pick a deterministic one like "more-com" to spend nothing on the
+   * LLM. Unknown ids are ignored. Applied before maxSources.
+   */
+  sources?: string[];
 }
 
 export interface SyncStats {
@@ -162,6 +168,10 @@ export class SyncGigsCommand {
     };
 
     let sources = activeSources();
+    if (options.sources && options.sources.length > 0) {
+      const wanted = new Set(options.sources);
+      sources = sources.filter((s) => wanted.has(s.id));
+    }
     if (options.maxSources !== undefined && options.maxSources >= 0) {
       sources = sources.slice(0, options.maxSources);
     }

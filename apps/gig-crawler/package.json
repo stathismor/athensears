@@ -12,7 +12,8 @@
     "start": "node --env-file=.env dist/index.js",
     "start:docker": "node dist/index.js",
     "lint": "eslint src/",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test:page": "tsx --env-file=.env scripts/test-page.ts"
   },
   "keywords": [
     "crawler",
