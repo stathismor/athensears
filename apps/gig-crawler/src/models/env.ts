@@ -31,7 +31,10 @@ export const EnvSchema = z.object({
   // allow ~1000 RPM); the inter-chunk delay is 60000/RPM ms. On the free tier,
   // lower GEMINI_RATE_LIMIT_RPM (~10) - the 429 backoff handles overruns either way.
   GEMINI_RATE_LIMIT_RPM: z.coerce.number().default(120),
-  GEMINI_CHUNK_SIZE: z.coerce.number().default(6),
+  // Pages per extraction call. Higher = fewer calls (same total tokens); Flash-Lite's
+  // context easily fits 10 pages (~50k chars). A failed chunk loses more at once, but
+  // retries + per-page result grouping cover that.
+  GEMINI_CHUNK_SIZE: z.coerce.number().default(10),
 
   // Auth
   SYNC_API_KEY: z.string().optional(),
