@@ -25,6 +25,64 @@ const TICKET_DOMAINS = [
 const TICKET_KEYWORDS = ["ticket", "buy", "αγορ", "εισιτ", "biliet"];
 
 /**
+ * Fetch a URL following redirects while carrying cookies across hops.
+ *
+ * Many sites sit behind bot gates (e.g. more.com's Queue-It "Safenet") that 302 to a
+ * challenge which sets a clearance cookie and bounces back to the page. The clearance
+ * only sticks if the client resends that cookie - a browser (or curl -c/-b) does, but
+ * the plain fetch redirect follower drops cookies between hops, so it loops until
+ * "redirect count exceeded". We follow redirects manually with a small in-request
+ * cookie jar so the clearance cookie is resent and the chain resolves. The jar is not
+ * persisted beyond this call.
+ */
+async function fetchFollowingRedirects(
+  startUrl: string,
+  init: { headers: Record<string, string>; timeoutMs: number; maxRedirects?: number }
+): Promise<Response> {
+  const { headers, timeoutMs, maxRedirects = 20 } = init;
+  const jar = new Map<string, string>();
+  let current = startUrl;
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const reqHeaders: Record<string, string> = { ...headers };
+    if (jar.size > 0) {
+      reqHeaders.Cookie = [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+    }
+    const res = await fetch(current, {
+      headers: reqHeaders,
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    // Accumulate Set-Cookie values as name=value (domain/path/expiry ignored - this
+    // jar lives only for the duration of one page fetch).
+    const resHeaders = res.headers as Headers & { getSetCookie?: () => string[] };
+    const setCookies =
+      typeof resHeaders.getSetCookie === "function"
+        ? resHeaders.getSetCookie()
+        : ([res.headers.get("set-cookie")].filter(Boolean) as string[]);
+    for (const sc of setCookies) {
+      const pair = sc.split(";", 1)[0];
+      const eq = pair.indexOf("=");
+      if (eq > 0) {
+        jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+      }
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (!location) {
+        return res;
+      }
+      current = new URL(location, current).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new Error("redirect count exceeded");
+}
+
+/**
  * Extract JSON-LD and OpenGraph metadata from raw HTML.
  * Returns a concise text summary for the LLM, or undefined if nothing useful found.
  */
@@ -221,14 +279,13 @@ export class PlaywrightAdapter implements ScraperPort {
       // backoff clears. A single flaky fetch otherwise silently drops a whole source.
       const html = await retry(
         async () => {
-          const res = await fetch(url, {
+          const res = await fetchFollowingRedirects(url, {
             headers: {
               "User-Agent": BROWSER_UA,
               Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "Accept-Language": "en,el;q=0.9",
             },
-            redirect: "follow",
-            signal: AbortSignal.timeout(20000),
+            timeoutMs: 20000,
           });
           if (!res.ok) {
             throw new Error(`HTTP ${res.status}`);
