@@ -76,8 +76,7 @@ Create a service. Environment:
 ```
 NODE_ENV=production
 HOST=0.0.0.0
-STRAPI_INTERNAL_URL=http://${{cms.RAILWAY_PRIVATE_DOMAIN}}:1337   # server-side fetch (private)
-PUBLIC_STRAPI_URL=https://<cms public url>                        # fallback
+STRAPI_API_URL=http://${{cms.RAILWAY_PRIVATE_DOMAIN}}:1337   # server-side fetch (private)
 ```
 
 Railway sets `PORT`; the Astro node server binds it. Add a public domain to this service -

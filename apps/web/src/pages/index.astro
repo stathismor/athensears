@@ -9,12 +9,10 @@ let gigs: Gig[] = [];
 let error: string | null = null;
 
 // Server-rendered: this runs per request, so gigs stay fresh without a rebuild.
-// Prefer the server-only internal URL (Railway private networking), then the
-// public URL, then localhost for dev.
-const strapiUrl =
-  (typeof process !== 'undefined' && process.env.STRAPI_INTERNAL_URL) ||
-  import.meta.env.PUBLIC_STRAPI_URL ||
-  'http://localhost:1337';
+// The page only ever fetches Strapi server-side, so a single URL covers every
+// environment (Railway private networking in prod, localhost in dev) - there's
+// no browser-facing use, hence no public/internal split.
+const strapiUrl = process.env.STRAPI_API_URL ?? 'http://localhost:1337';
 
 try {
   // Retries a few times so a transient CMS blip (redeploy, cold start) doesn't

@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
     environment:
       # Server-side fetch over the compose network
-      STRAPI_INTERNAL_URL: http://cms:1337
+      STRAPI_API_URL: http://cms:1337
       HOST: 0.0.0.0
       PORT: 4321
       NODE_ENV: production
