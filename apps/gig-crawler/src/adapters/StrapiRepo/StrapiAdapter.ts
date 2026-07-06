@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import type { GigsPort } from "../../ports/GigsPort.js";
+import type { GigsPort, StoredGig } from "../../ports/GigsPort.js";
 import type { Gig } from "../../models/gig.js";
 import type { Venue } from "../../models/venue.js";
 import { toStrapiGig } from "../../models/gig.js";
@@ -178,10 +178,10 @@ export class StrapiAdapter implements GigsPort {
     );
   }
 
-  async updateGig(documentId: string, gig: Gig, venueId: number): Promise<number> {
+  async updateGig(documentId: string, gig: Gig, venueId: number, manual = false): Promise<number> {
     return retry(
       async () => {
-        const strapiGig = toStrapiGig(gig, venueId);
+        const strapiGig = toStrapiGig(gig, venueId, manual);
         // Strapi 5 updates by documentId
         const response = await this.client.put(`/api/gigs/${documentId}`, strapiGig);
 
@@ -296,6 +296,66 @@ export class StrapiAdapter implements GigsPort {
 
     logger.info({ deleted, notSeenSince: notSeenSince.toISOString() }, "Pruned stale gigs");
     return deleted;
+  }
+
+  async listAllGigs(): Promise<StoredGig[]> {
+    const out: StoredGig[] = [];
+    // Walk pages until we've seen them all. pageCount comes from Strapi's meta; fall back to
+    // "stop when a short page arrives" if it's missing.
+    for (let page = 1; page < 1000; page++) {
+      const response = await retry(
+        () =>
+          this.client.get("/api/gigs", {
+            params: {
+              populate: "venue",
+              "pagination[page]": page,
+              "pagination[pageSize]": 100,
+            },
+          }),
+        {
+          maxAttempts: 3,
+          onError: (error, attempt) => {
+            logger.warn({ error, attempt, page }, "List gigs attempt failed");
+          },
+        }
+      );
+
+      const parsed = StrapiGigResponseSchema.parse(response.data);
+      const rows = Array.isArray(parsed.data) ? parsed.data : parsed.data ? [parsed.data] : [];
+      for (const g of rows) {
+        const venueName = g.venue && typeof g.venue === "object" ? g.venue.name : "";
+        out.push({
+          documentId: g.documentId,
+          title: g.title,
+          date: new Date(g.date),
+          venueName,
+          manual: g.manual ?? false,
+          url: g.url ?? undefined,
+          price: g.price ?? undefined,
+          description: g.description ?? undefined,
+          genres: g.genres ?? [],
+        });
+      }
+
+      const pageCount = (parsed.meta as { pagination?: { pageCount?: number } } | undefined)
+        ?.pagination?.pageCount;
+      if (pageCount !== undefined ? page >= pageCount : rows.length < 100) {
+        break;
+      }
+    }
+
+    logger.info({ count: out.length }, "Listed all gigs");
+    return out;
+  }
+
+  async deleteGig(documentId: string): Promise<void> {
+    await retry(() => this.client.delete(`/api/gigs/${documentId}`), {
+      maxAttempts: 3,
+      onError: (error, attempt) => {
+        logger.warn({ error, attempt, documentId }, "Delete gig attempt failed");
+      },
+    });
+    logger.info({ documentId }, "Deleted gig");
   }
 
   async deleteAllGigs(): Promise<number> {

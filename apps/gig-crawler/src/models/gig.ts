@@ -36,7 +36,12 @@ export const StrapiGigSchema = z.object({
 
 export type StrapiGig = z.infer<typeof StrapiGigSchema>;
 
-export function toStrapiGig(gig: Gig, venueId: number): StrapiGig {
+/**
+ * `manual` defaults to false - the crawler only ever writes auto gigs, so callers omit it.
+ * The normalize/backfill path passes the row's existing flag through, so re-cleaning a
+ * hand-edited gig (opt-in) doesn't silently demote it to auto.
+ */
+export function toStrapiGig(gig: Gig, venueId: number, manual = false): StrapiGig {
   return {
     data: {
       title: gig.title,
@@ -46,7 +51,7 @@ export function toStrapiGig(gig: Gig, venueId: number): StrapiGig {
       price: gig.price,
       url: gig.url,
       genres: gig.genres,
-      manual: false,
+      manual,
       // imageUrl intentionally excluded - Strapi schema doesn't support it
     },
   };

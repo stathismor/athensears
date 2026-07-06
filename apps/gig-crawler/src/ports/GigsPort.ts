@@ -1,6 +1,24 @@
 import type { Gig } from "../models/gig.js";
 import type { Venue } from "../models/venue.js";
 
+/**
+ * A gig as stored in the CMS, read back for maintenance passes (e.g. the normalize
+ * backfill). Carries the identifiers and the current venue name (from the populated
+ * relation) so a caller can re-derive the cleaned form and diff it against what's stored.
+ */
+export interface StoredGig {
+  documentId: string;
+  title: string;
+  date: Date;
+  /** Current venue name from the populated relation; "" if the gig has no venue. */
+  venueName: string;
+  manual: boolean;
+  url?: string;
+  price?: string;
+  description?: string;
+  genres: string[];
+}
+
 export interface GigsPort {
   /**
    * Find venue by name
@@ -35,14 +53,28 @@ export interface GigsPort {
   createGig(gig: Gig, venueId: number): Promise<number>;
 
   /**
-   * Update an existing gig (by Strapi documentId)
+   * Update an existing gig (by Strapi documentId). `manual` defaults to false (the crawler
+   * only writes auto gigs); the normalize backfill passes the row's existing flag so a
+   * re-cleaned manual gig stays manual.
    */
-  updateGig(documentId: string, gig: Gig, venueId: number): Promise<number>;
+  updateGig(documentId: string, gig: Gig, venueId: number, manual?: boolean): Promise<number>;
 
   /**
    * Get existing venue ID or create new venue
    */
   getOrCreateVenue(venueName: string): Promise<number>;
+
+  /**
+   * Fetch every stored gig (paginated internally), with its venue populated. Used by
+   * maintenance passes that reconcile stored rows against current cleaning rules.
+   */
+  listAllGigs(): Promise<StoredGig[]>;
+
+  /**
+   * Delete a single gig by Strapi documentId. Used to remove duplicates that cleaning
+   * collapses onto an existing row.
+   */
+  deleteGig(documentId: string): Promise<void>;
 
   /**
    * Delete all gigs

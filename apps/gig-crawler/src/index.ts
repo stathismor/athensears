@@ -6,6 +6,7 @@ import { PlaywrightAdapter } from "./adapters/ContentScraperRepo/PlaywrightAdapt
 import { GeminiAdapter } from "./adapters/GeminiRepo/GeminiAdapter.js";
 import { StrapiAdapter } from "./adapters/StrapiRepo/StrapiAdapter.js";
 import { SyncGigsCommand, type SyncOptions } from "./commands/SyncGigsCommand.js";
+import { NormalizeGigsCommand } from "./commands/NormalizeGigsCommand.js";
 
 const app = express();
 app.use(express.json());
@@ -128,6 +129,43 @@ app.post("/api/sync", (req, res) => {
   });
 });
 
+// Normalize/backfill endpoint - re-runs the title/venue cleaners over stored gigs and
+// reconciles them in place. Dry-run by default (reports what would change); pass
+// {"dryRun": false} to apply, and {"includeManual": true} to also re-clean manual gigs.
+app.post("/api/gigs/normalize", async (req, res) => {
+  if (env.SYNC_API_KEY) {
+    const auth = req.headers.authorization;
+    if (auth !== `Bearer ${env.SYNC_API_KEY}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+  }
+
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  // Dry-run by default (safe); must explicitly opt in to writes and to touching manual gigs.
+  const dryRun = !(b.dryRun === false || b.dryRun === "false");
+  const includeManual = b.includeManual === true || b.includeManual === "true";
+
+  // A live normalize mutates the same rows a sync writes; don't let them overlap.
+  if (isSyncRunning) {
+    return res.status(409).json({
+      status: "already_running",
+      message: "A sync or normalize is already in progress",
+    });
+  }
+
+  isSyncRunning = true;
+  try {
+    const command = new NormalizeGigsCommand(gigsAdapter);
+    const report = await command.execute({ dryRun, includeManual });
+    return res.json({ status: dryRun ? "dry_run" : "normalized", ...report });
+  } catch (error: any) {
+    logger.error({ error }, "Normalize endpoint failed");
+    return res.status(500).json({ error: error.message });
+  } finally {
+    isSyncRunning = false;
+  }
+});
+
 // Dry-run delete endpoint - shows what would be deleted, then deletes
 app.post("/api/gigs/delete", async (req, res) => {
   if (env.SYNC_API_KEY) {
@@ -211,6 +249,8 @@ app.get("/", (req, res) => {
       health: "/health",
       sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources)',
       syncStatus: "/api/sync/status (GET) - Check sync status",
+      normalize:
+        "/api/gigs/normalize (POST) - Re-clean stored gig titles/venues in place. Dry-run by default; JSON body: dryRun:false to apply, includeManual:true to also re-clean manual gigs",
     },
   });
 });
