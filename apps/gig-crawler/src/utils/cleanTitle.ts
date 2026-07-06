@@ -56,6 +56,83 @@ function alphaTokens(s: string): string[] {
   return (s.toLowerCase().match(/\p{L}+|\p{N}+/gu) ?? []).filter((t) => !/^\d+$/.test(t));
 }
 
+/** Lowercase + strip diacritics (accent-insensitive), keeping the base script. */
+function foldText(s: string): string {
+  return s
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase();
+}
+
+/** Folded significant tokens (words, or 2+ digit runs), dropping 1-char noise. */
+function significantTokens(s: string): string[] {
+  return (foldText(s).match(/\p{L}[\p{L}\p{N}]*|\p{N}{2,}/gu) ?? []).filter((t) => t.length >= 2);
+}
+
+/**
+ * Generic place/venue-type stems (accent-folded) in the languages the sources use. A
+ * trailing title segment built around one is a venue/location/series tag the source
+ * appended, not part of the act - e.g. "... - Φ hill Sessions Λόφος Φιλοπάππου" or
+ * "... - Κέντρο Πολιτισμού Ελληνικός Κόσμος". Matched as token *prefixes*, so Greek
+ * inflection ("λόφος/λόφο/λόφου") is covered. These are common nouns, not specific venue
+ * names, so the rule stays city- and venue-agnostic; an actual venue *name* in the tail
+ * is caught separately by the venue-token check, letting this list stay narrow and
+ * low-collision (generic words that double as band names - beach, park, hall, club - are
+ * deliberately left out).
+ */
+const PLACE_TYPE_STEMS = [
+  // Greek
+  "θεατρ",
+  "αμφιθεατρ",
+  "ωδει",
+  "μεγαρ",
+  "αιθουσ",
+  "στεγ",
+  "λοφ",
+  "κεντρ",
+  "ιδρυμ",
+  "φεστιβαλ",
+  "αρεν",
+  "γηπεδ",
+  "μουσει",
+  "πλατει",
+  "παραλι",
+  "καστρ",
+  "πολιτισμ",
+  "παρκ",
+  // Latin / English
+  "theat",
+  "amphitheat",
+  "odeon",
+  "megaron",
+  "fest",
+  "session",
+  "hill",
+  "arena",
+  "stadium",
+  "waterfront",
+];
+
+/**
+ * Whether a trailing title segment is a venue/location/series tag rather than an act:
+ * either every significant word repeats the known venue, or it is built around a generic
+ * place-type word or the active city's name.
+ */
+function isPlaceLikeTail(
+  segment: string,
+  venueTokens: ReadonlySet<string>,
+  cityTokens: ReadonlySet<string>
+): boolean {
+  const toks = significantTokens(segment);
+  if (toks.length === 0) {
+    return false;
+  }
+  if (venueTokens.size > 0 && toks.every((t) => venueTokens.has(t))) {
+    return true;
+  }
+  return toks.some((t) => cityTokens.has(t) || PLACE_TYPE_STEMS.some((stem) => t.startsWith(stem)));
+}
+
 /** Replace fancy dashes (figure/en/em/horizontal-bar/minus) with a plain ASCII hyphen. */
 export function normalizeDashes(s: string): string {
   return s.replace(/[‒–—―−]/g, "-");
@@ -73,6 +150,9 @@ function escapeRegExp(s: string): string {
  *     "Release Athens 2026 / Pantera" -> "Pantera" (only when `venueName` is given);
  *  2. a trailing venue/location suffix: " at X", " @ X", or the Greek locative
  *     " στα/στο/στη/στην/στον/στις X" - e.g. "Artist at Island" / "Μπάντα στα Αστέρια";
+ *  2b. trailing " - X" segment(s) where X is a venue/location/series tag - either a repeat
+ *     of the known venue or something built around a generic place word ("… - Κέντρο
+ *     Πολιτισμού Ελληνικός Κόσμος", "… - Φ hill Sessions Λόφος Φιλοπάππου");
  *  3. a trailing "(live) in/at <city>" tail - e.g. "Elder (USA) live in Athens" (driven
  *     by `cityAliases` so it generalizes to any city);
  *  4. a trailing country tag: "(US)", "(USA)", "(FR)";
@@ -108,6 +188,21 @@ export function cleanEventTitle(
     .replace(/\s+(?:@|\bat)\s+.+$/iu, "")
     .replace(/\s+στ(?:α|ο|η|ην|ον|ις|ους)\s+.+$/iu, "")
     .trim();
+
+  // 2b) Trailing venue/location/series tail(s). Sources pad titles with the venue, the
+  //     neighborhood, or a "<series> <location>" tag as extra " - " segments (e.g.
+  //     "… - Κέντρο Πολιτισμού Ελληνικός Κόσμος", "… - Φ hill Sessions Λόφος Φιλοπάππου").
+  //     Strip them from the end while the last dash-segment looks like a place - but always
+  //     keep the leading act, so co-headline bills ("A - B", B an act) survive intact.
+  const venueNameTokens = new Set(significantTokens(venueName));
+  const cityTokens = new Set(cityAliases.map((a) => foldText(a)));
+  for (let i = 0; i < 3; i++) {
+    const m = t.match(/^(.*\S)\s+[-–—]\s+(\S.*)$/u);
+    if (!m || !isPlaceLikeTail(m[2], venueNameTokens, cityTokens)) {
+      break;
+    }
+    t = m[1].trim();
+  }
 
   // 3) Trailing "(live) in/at <city>" tail (e.g. "Elder (USA) live in Athens").
   if (cityAliases.length > 0) {
