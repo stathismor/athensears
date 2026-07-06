@@ -67,8 +67,10 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Manual sync endpoint (non-blocking)
-app.post("/api/sync", (req, res) => {
+// Manual sync endpoint. Scrape sync (the default) runs in the background and returns
+// immediately; the normalize/backfill mode (normalize=true) runs synchronously and
+// returns a report. Both share the isSyncRunning guard so they never overlap.
+app.post("/api/sync", async (req, res) => {
   if (env.SYNC_API_KEY) {
     const auth = req.headers.authorization;
     if (auth !== `Bearer ${env.SYNC_API_KEY}`) {
@@ -87,6 +89,32 @@ app.post("/api/sync", (req, res) => {
     return Number.isFinite(n) ? n : undefined;
   };
 
+  if (isSyncRunning) {
+    return res.status(409).json({
+      status: "already_running",
+      message: "A sync is already in progress",
+    });
+  }
+
+  // Normalize/backfill mode: re-clean stored gig titles/venues in place - no scrape, no
+  // LLM. Dry-run by default (reports what would change); dryRun:false applies, and
+  // includeManual:true also re-cleans hand-edited gigs. Runs synchronously so the caller
+  // gets the report back in the response (unlike the background scrape sync below).
+  if (truthy(p.normalize)) {
+    const dryRun = !(p.dryRun === false || p.dryRun === "false");
+    const includeManual = truthy(p.includeManual);
+    isSyncRunning = true;
+    try {
+      const report = await new NormalizeGigsCommand(gigsAdapter).execute({ dryRun, includeManual });
+      return res.json({ status: dryRun ? "dry_run" : "normalized", ...report });
+    } catch (error: any) {
+      logger.error({ error }, "Normalize failed");
+      return res.status(500).json({ error: error.message });
+    } finally {
+      isSyncRunning = false;
+    }
+  }
+
   // Non-destructive by default: upsert into existing gigs. clear=true wipes non-manual
   // gigs first (rarely needed; a normal run already refreshes).
   const clearExisting = truthy(p.clear);
@@ -98,13 +126,6 @@ app.post("/api/sync", (req, res) => {
   // Test a specific source (or a few): {"sources":["more.com"]} or {"sources":"more.com,fuzz-club"}.
   // Pick a deterministic source like more.com to test without spending on the LLM.
   const sources = normalizeSources(p.sources);
-
-  if (isSyncRunning) {
-    return res.status(409).json({
-      status: "already_running",
-      message: "A sync is already in progress",
-    });
-  }
 
   const options: SyncOptions = {
     clearExisting,
@@ -127,43 +148,6 @@ app.post("/api/sync", (req, res) => {
       ? "Sync started (clearing existing gigs first)"
       : "Sync started in background (keeping existing data)",
   });
-});
-
-// Normalize/backfill endpoint - re-runs the title/venue cleaners over stored gigs and
-// reconciles them in place. Dry-run by default (reports what would change); pass
-// {"dryRun": false} to apply, and {"includeManual": true} to also re-clean manual gigs.
-app.post("/api/gigs/normalize", async (req, res) => {
-  if (env.SYNC_API_KEY) {
-    const auth = req.headers.authorization;
-    if (auth !== `Bearer ${env.SYNC_API_KEY}`) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-  }
-
-  const b = (req.body ?? {}) as Record<string, unknown>;
-  // Dry-run by default (safe); must explicitly opt in to writes and to touching manual gigs.
-  const dryRun = !(b.dryRun === false || b.dryRun === "false");
-  const includeManual = b.includeManual === true || b.includeManual === "true";
-
-  // A live normalize mutates the same rows a sync writes; don't let them overlap.
-  if (isSyncRunning) {
-    return res.status(409).json({
-      status: "already_running",
-      message: "A sync or normalize is already in progress",
-    });
-  }
-
-  isSyncRunning = true;
-  try {
-    const command = new NormalizeGigsCommand(gigsAdapter);
-    const report = await command.execute({ dryRun, includeManual });
-    return res.json({ status: dryRun ? "dry_run" : "normalized", ...report });
-  } catch (error: any) {
-    logger.error({ error }, "Normalize endpoint failed");
-    return res.status(500).json({ error: error.message });
-  } finally {
-    isSyncRunning = false;
-  }
 });
 
 // Dry-run delete endpoint - shows what would be deleted, then deletes
@@ -247,10 +231,8 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources)',
+      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or normalize:true to re-clean stored gig titles/venues in place instead of scraping (dry-run by default; dryRun:false applies, includeManual:true also re-cleans manual gigs)',
       syncStatus: "/api/sync/status (GET) - Check sync status",
-      normalize:
-        "/api/gigs/normalize (POST) - Re-clean stored gig titles/venues in place. Dry-run by default; JSON body: dryRun:false to apply, includeManual:true to also re-clean manual gigs",
     },
   });
 });
