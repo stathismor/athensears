@@ -31,6 +31,13 @@ const TITLES: [string, string, string][] = [
     "Γιάννης Αγγελάκας & Νίκος Βελιώτης - Λύκοι Λάιβ",
   ],
   ["Some Band - Gagarin 205", "Gagarin 205", "Some Band"],
+  // "@venue" tail, glued (no trailing space) and spaced - both are venue tails, not the act
+  [
+    "Nalyssa Green & Miss Trichromi @Στοά Culture",
+    "Στοά Culture",
+    "Nalyssa Green & Miss Trichromi",
+  ],
+  ["Some Band @ Gagarin 205", "Gagarin 205", "Some Band"],
   // trailing date fragment (+ the " at <venue>" the source also appends)
   ["The Young Gods , 2/10 at Gazarte Ground Stage", "Gazarte", "The Young Gods"],
   ["Some Band - 12/10/2026", "Gagarin 205", "Some Band"],

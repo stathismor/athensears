@@ -184,9 +184,11 @@ export function cleanEventTitle(
     }
   }
 
-  // 2) Trailing venue/location suffix.
+  // 2) Trailing venue/location suffix. "@" needs no trailing space (sources write
+  //    "Artist @Venue" glued together, e.g. "… @Στοά Culture"); "at" does, so it stays a
+  //    whole word and never eats "… at" mid-name.
   t = t
-    .replace(/\s+(?:@|\bat)\s+.+$/iu, "")
+    .replace(/\s+(?:@\s*|\bat\s+).+$/iu, "")
     .replace(/\s+στ(?:α|ο|η|ην|ον|ις|ους)\s+.+$/iu, "")
     .trim();
 
