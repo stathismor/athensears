@@ -8,7 +8,26 @@ import { StrapiAdapter } from "./adapters/StrapiRepo/StrapiAdapter.js";
 import { SyncGigsCommand, type SyncOptions } from "./commands/SyncGigsCommand.js";
 
 const app = express();
+app.use(express.json());
 const port = parseInt(env.PORT, 10);
+
+/**
+ * Normalize source identifiers from the request into registry ids. Accepts a
+ * comma-separated string ("more.com,fuzz-club") or an array, and maps the natural
+ * domain spelling to the dash form used by source ids ("more.com" -> "more-com").
+ */
+function normalizeSources(value: unknown): string[] | undefined {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const ids = raw
+    .map((s) =>
+      String(s)
+        .trim()
+        .toLowerCase()
+        .replace(/[.\s]+/g, "-")
+    )
+    .filter(Boolean);
+  return ids.length > 0 ? ids : undefined;
+}
 
 // Initialize adapters
 const scraperAdapter = new PlaywrightAdapter();
@@ -56,26 +75,28 @@ app.post("/api/sync", (req, res) => {
     }
   }
 
-  // Non-destructive by default: upsert into existing gigs. Pass ?clear=true to
-  // wipe non-manual gigs first (rarely needed; a normal run already refreshes).
-  const clearExisting = req.query.clear === "true";
-  const monthsAhead = req.query.monthsAhead
-    ? parseInt(req.query.monthsAhead as string, 10)
-    : undefined;
-  // Cache on by default; ?cache=false or ?force=true bypasses it (full re-extraction).
-  const useCache = !(req.query.cache === "false" || req.query.force === "true");
+  // Options come from the JSON request body.
+  const p: Record<string, unknown> = (req.body ?? {}) as Record<string, unknown>;
+  const truthy = (v: unknown) => v === true || v === "true" || v === "1";
+  const num = (v: unknown): number | undefined => {
+    if (v === undefined || v === null || v === "") {
+      return undefined;
+    }
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  // Non-destructive by default: upsert into existing gigs. clear=true wipes non-manual
+  // gigs first (rarely needed; a normal run already refreshes).
+  const clearExisting = truthy(p.clear);
+  // Cache on by default; cache=false or force=true bypasses it (full re-extraction).
+  const useCache = !(p.cache === false || p.cache === "false" || truthy(p.force));
+  const monthsAhead = num(p.monthsAhead);
   // Small-scale test knob: cap how many sources are crawled.
-  const maxSources = req.query.maxSources
-    ? parseInt(req.query.maxSources as string, 10)
-    : undefined;
-  // Test a specific source (or a few): ?sources=more-com or ?sources=more-com,fuzz-club.
-  // Pick a deterministic source like more-com to test without spending on the LLM.
-  const sources = req.query.sources
-    ? (req.query.sources as string)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : undefined;
+  const maxSources = num(p.maxSources);
+  // Test a specific source (or a few): {"sources":["more.com"]} or {"sources":"more.com,fuzz-club"}.
+  // Pick a deterministic source like more.com to test without spending on the LLM.
+  const sources = normalizeSources(p.sources);
 
   if (isSyncRunning) {
     return res.status(409).json({
@@ -116,7 +137,8 @@ app.post("/api/gigs/delete", async (req, res) => {
     }
   }
 
-  const dryRun = req.query.dryRun !== "false";
+  // Dry-run by default (safe); pass {"dryRun": false} in the body to actually delete.
+  const dryRun = !(req.body?.dryRun === false || req.body?.dryRun === "false");
 
   try {
     // Fetch all non-manual gigs (same filter as deleteAllGigsIndividual)
@@ -187,7 +209,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: "/api/sync (POST) - Start background sync. Query params: clear=true, monthsAhead=N, cache=false|force=true (bypass cache), maxSources=N, sources=more-com,fuzz-club (restrict to specific source ids)",
+      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources)',
       syncStatus: "/api/sync/status (GET) - Check sync status",
     },
   });
