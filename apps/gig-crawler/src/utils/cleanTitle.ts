@@ -153,6 +153,7 @@ function escapeRegExp(s: string): string {
  *  2b. trailing " - X" segment(s) where X is a venue/location/series tag - either a repeat
  *     of the known venue or something built around a generic place word ("… - Κέντρο
  *     Πολιτισμού Ελληνικός Κόσμος", "… - Φ hill Sessions Λόφος Φιλοπάππου");
+ *  2c. a trailing date fragment - e.g. "The Young Gods , 2/10" -> "The Young Gods";
  *  3. a trailing "(live) in/at <city>" tail - e.g. "Elder (USA) live in Athens" (driven
  *     by `cityAliases` so it generalizes to any city);
  *  4. a trailing country tag: "(US)", "(USA)", "(FR)";
@@ -203,6 +204,11 @@ export function cleanEventTitle(
     }
     t = m[1].trim();
   }
+
+  // 2c) Trailing date fragment the source tacks on ("The Young Gods , 2/10", "… 2/10/2026").
+  //     A day/month(/year) in d/m or d.m form is never part of an act name; strip it plus any
+  //     leading comma/dash. Bare numbers ("Sum 41", "blink-182") have no separator, so survive.
+  t = t.replace(/[\s,]*[-–—]?\s*\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\s*$/u, "").trim();
 
   // 3) Trailing "(live) in/at <city>" tail (e.g. "Elder (USA) live in Athens").
   if (cityAliases.length > 0) {
