@@ -73,21 +73,52 @@ const VENUE_ALIASES: Record<string, string> = {
   "palaio faliro": "Release Athens",
   "παλαιό φάληρο": "Release Athens",
   "παλαιο φαληρο": "Release Athens",
+
+  // National Observatory of Athens - the source tacks its "Visitor Centre, Thiseio"
+  // sub-facility onto the institution name; keep only the institution. (SNFCC and other
+  // "descriptor - «Proper Name»" venues are handled generically by the quoted-name rule.)
+  "εθνικο αστεροσκοπειο αθηνων - κεντρο επισκεπτων θησειου": "Εθνικό Αστεροσκοπείο Αθηνών",
 };
 
+/** Lowercase + strip diacritics, so the alias lookup is accent-insensitive. */
+function foldKey(s: string): string {
+  return s
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/\s+(?:19|20)\d{2}$/, "") // drop a trailing year ("Release Athens 2026")
+    .trim();
+}
+
+/** Alias map re-keyed on the accent-folded form, built once. */
+const FOLDED_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(VENUE_ALIASES).map(([k, v]) => [foldKey(k), v])
+);
+
 /**
- * Normalize a venue name to its canonical form.
- * Returns the canonical name if an alias is found, otherwise returns the original name trimmed.
+ * A quoted proper name at the *end* of a venue string - the recognizable name in
+ * institutional venues written as "descriptor - descriptor - «Proper Name»" (e.g.
+ * "Θόλος - Κέντρο Πολιτισμού - Ίδρυμα «Σταύρος Νιάρχος»" -> "Σταύρος Νιάρχος"). Anchoring
+ * to the end deliberately ignores a leading hall label like "«THEATRON», … Ellinikos
+ * Kosmos", where the quoted part is not the venue's recognizable name.
+ */
+function quotedNameAtEnd(s: string): string | null {
+  const m = s.match(/[«"“]([^«»"“”]{3,})[»"”][\s).]*$/u);
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * Normalize a venue name to its canonical form. Returns, in order of precedence: a mapped
+ * alias (accent-insensitive), a quoted proper name at the end of the string, or the
+ * dash-normalized original.
  */
 export function normalizeVenueName(name: string): string {
   // Normalize fancy dashes to a plain hyphen first, so both the alias lookup and the
   // stored/displayed venue name are consistent.
   const clean = normalizeDashes(name).trim();
-  // Strip a trailing year (e.g. "Release Athens 2026") so it matches the base alias
-  // without needing a per-year entry; fall back to the cleaned name if no alias.
-  const key = clean
-    .toLowerCase()
-    .replace(/\s+(?:19|20)\d{2}$/, "")
-    .trim();
-  return VENUE_ALIASES[key] ?? clean;
+  const aliased = FOLDED_ALIASES[foldKey(clean)];
+  if (aliased) {
+    return aliased;
+  }
+  return quotedNameAtEnd(clean) ?? clean;
 }
