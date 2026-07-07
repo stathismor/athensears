@@ -8,8 +8,6 @@ import { activeSources } from "../models/sources.js";
 import { logger } from "../utils/logger.js";
 
 export interface NormalizeOptions {
-  /** Report only, no writes (default true). Set false to actually update/delete. */
-  dryRun?: boolean;
   /** Also re-clean hand-edited (manual) gigs (default false - they're left untouched). */
   includeManual?: boolean;
 }
@@ -33,7 +31,6 @@ export interface NormalizeMerge {
 }
 
 export interface NormalizeReport {
-  dryRun: boolean;
   includeManual: boolean;
   /** All gigs in the CMS. */
   total: number;
@@ -70,7 +67,6 @@ export class NormalizeGigsCommand {
   constructor(private readonly gigs: GigsPort) {}
 
   async execute(options: NormalizeOptions = {}): Promise<NormalizeReport> {
-    const dryRun = options.dryRun ?? true;
     const includeManual = options.includeManual ?? false;
     const city = ACTIVE_CITY.nameAliases;
 
@@ -81,7 +77,6 @@ export class NormalizeGigsCommand {
 
     const all = await this.gigs.listAllGigs();
     const report: NormalizeReport = {
-      dryRun,
       includeManual,
       total: all.length,
       scanned: 0,
@@ -172,10 +167,8 @@ export class NormalizeGigsCommand {
             fromVenue: keeper.gig.venueName,
             toVenue: merged.venueName,
           });
-          if (!dryRun) {
-            const venueId = await this.gigs.getOrCreateVenue(merged.venueName);
-            await this.gigs.updateGig(keeper.gig.documentId, merged, venueId, keeper.gig.manual);
-          }
+          const venueId = await this.gigs.getOrCreateVenue(merged.venueName);
+          await this.gigs.updateGig(keeper.gig.documentId, merged, venueId, keeper.gig.manual);
         } else {
           report.unchanged++;
         }
@@ -188,9 +181,7 @@ export class NormalizeGigsCommand {
             date: keeper.gig.date.toISOString().slice(0, 10),
             venue: merged.venueName,
           });
-          if (!dryRun) {
-            await this.gigs.deleteGig(loser.gig.documentId);
-          }
+          await this.gigs.deleteGig(loser.gig.documentId);
         }
       } catch (error) {
         report.errors++;
@@ -200,7 +191,6 @@ export class NormalizeGigsCommand {
 
     logger.info(
       {
-        dryRun,
         includeManual,
         total: report.total,
         scanned: report.scanned,
@@ -211,7 +201,7 @@ export class NormalizeGigsCommand {
         skippedNoVenue: report.skippedNoVenue,
         errors: report.errors,
       },
-      dryRun ? "Normalize dry-run complete (no writes)" : "Normalize complete"
+      "Normalize complete"
     );
     return report;
   }

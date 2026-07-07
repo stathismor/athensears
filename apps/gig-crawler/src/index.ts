@@ -57,6 +57,24 @@ async function syncGigs(options: SyncOptions = {}) {
   }
 }
 
+// Normalize/backfill: re-clean stored gig titles/venues in place (no scrape, no LLM).
+// Runs in the background like syncGigs; the full report is logged inside execute().
+async function normalizeGigs(options: { includeManual?: boolean } = {}) {
+  if (isSyncRunning) {
+    logger.warn("Sync already in progress, skipping normalize");
+    return;
+  }
+
+  isSyncRunning = true;
+  try {
+    await new NormalizeGigsCommand(gigsAdapter).execute(options);
+  } catch (error) {
+    logger.error({ error }, "Normalize failed");
+  } finally {
+    isSyncRunning = false;
+  }
+}
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
@@ -67,10 +85,10 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Manual sync endpoint. Scrape sync (the default) runs in the background and returns
-// immediately; the normalize/backfill mode (normalize=true) runs synchronously and
-// returns a report. Both share the isSyncRunning guard so they never overlap.
-app.post("/api/sync", async (req, res) => {
+// Manual sync endpoint (non-blocking). The default scrapes; normalize=true instead runs
+// the in-place title/venue backfill. Both run in the background, return immediately, and
+// share the isSyncRunning guard so they never overlap.
+app.post("/api/sync", (req, res) => {
   if (env.SYNC_API_KEY) {
     const auth = req.headers.authorization;
     if (auth !== `Bearer ${env.SYNC_API_KEY}`) {
@@ -97,22 +115,13 @@ app.post("/api/sync", async (req, res) => {
   }
 
   // Normalize/backfill mode: re-clean stored gig titles/venues in place - no scrape, no
-  // LLM. Dry-run by default (reports what would change); dryRun:false applies, and
-  // includeManual:true also re-cleans hand-edited gigs. Runs synchronously so the caller
-  // gets the report back in the response (unlike the background scrape sync below).
+  // LLM. includeManual:true also re-cleans hand-edited gigs. The report is logged.
   if (truthy(p.normalize)) {
-    const dryRun = !(p.dryRun === false || p.dryRun === "false");
     const includeManual = truthy(p.includeManual);
-    isSyncRunning = true;
-    try {
-      const report = await new NormalizeGigsCommand(gigsAdapter).execute({ dryRun, includeManual });
-      return res.json({ status: dryRun ? "dry_run" : "normalized", ...report });
-    } catch (error: any) {
-      logger.error({ error }, "Normalize failed");
-      return res.status(500).json({ error: error.message });
-    } finally {
-      isSyncRunning = false;
-    }
+    normalizeGigs({ includeManual }).catch((error) => {
+      logger.error({ error }, "Background normalize failed");
+    });
+    return res.json({ status: "started", message: "Normalize started in background" });
   }
 
   // Non-destructive by default: upsert into existing gigs. clear=true wipes non-manual
@@ -231,7 +240,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or normalize:true to re-clean stored gig titles/venues in place instead of scraping (dry-run by default; dryRun:false applies, includeManual:true also re-cleans manual gigs)',
+      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or normalize:true to re-clean stored gig titles/venues in place instead of scraping (includeManual:true also re-cleans manual gigs)',
       syncStatus: "/api/sync/status (GET) - Check sync status",
     },
   });
