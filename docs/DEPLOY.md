@@ -68,7 +68,9 @@ CRON_SCHEDULE=0 4 * * *      # nightly 04:00 Athens
 
 It has a `/health` check and an embedded nightly cron. Trigger the first run manually:
 `curl -XPOST https://<crawler-url>/api/sync` (add `-H "Authorization: Bearer $SYNC_API_KEY"`
-if you set one). Watch logs; it should finish in a few minutes with `errors: 0`.
+if you set one). Watch logs; it should finish in a few minutes with `errors: 0`. The same
+endpoint takes options (`force`, `sources`, `clear`, `normalize`, ...) - see
+`apps/gig-crawler/README.md` for the full API.
 
 ## 4. Web (SSR) - `apps/web/Dockerfile`
 Create a service. Environment:

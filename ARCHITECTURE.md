@@ -48,8 +48,11 @@ A long-running Node service with two jobs:
 - **A scheduled sync** that runs nightly (02:00 Athens time by default) and does the full
   discover-extract-filter-store pipeline described below.
 - **A small HTTP surface** for operating it: a health check, a manual sync trigger, a sync
-  status probe, and a safe (dry-run by default) bulk-delete endpoint. The sync and delete
-  endpoints can be protected by a shared bearer token when one is configured.
+  status probe, and a safe (dry-run by default) bulk-delete endpoint. The sync trigger
+  doubles as a maintenance tool - `normalize: true` re-cleans stored gig titles/venues in
+  place (no scrape) after the cleaning rules change. These endpoints can be protected by a
+  shared bearer token when one is configured. See `apps/gig-crawler/README.md` for the full
+  API and flags.
 
 Discovery is driven by a **curated source registry**, not open-web search. Each source is
 a known Athens venue or a ticketing aggregator, described by one or more listing-page URLs
