@@ -1,7 +1,8 @@
 # gig-crawler
 
-Express service that crawls a curated set of Athens venues and ticketing pages
-nightly, extracts upcoming gigs, and upserts them into the Strapi CMS.
+Express service that crawls a curated set of Athens venues and ticketing pages,
+extracts upcoming gigs, and upserts them into the Strapi CMS. A run is triggered on
+demand via the HTTP API; the service has no built-in scheduler.
 
 ## How it works
 
@@ -25,7 +26,8 @@ See the root `ARCHITECTURE.md` for the full data flow and cost controls.
 
 ## API
 
-A small HTTP surface for operating the service (the sync also runs on a cron - see Setup).
+A small HTTP surface for operating the service. Syncs run only when triggered here (there
+is no built-in scheduler - to run it regularly, point an external scheduler at `/api/sync`).
 If `SYNC_API_KEY` is set, the state-changing endpoints require `Authorization: Bearer
 $SYNC_API_KEY` (calls without it get `401`).
 
@@ -69,7 +71,7 @@ safe to re-run whenever the cleaning rules change. It ignores the scrape-mode fi
 > idempotent and the full report is logged, but deletions aren't reversible.
 
 ```bash
-# Nightly-style sync (same as the cron)
+# Full sync (crawl every source and upsert)
 curl -XPOST https://<crawler-url>/api/sync
 
 # Force a full re-extraction (skip the cache)
@@ -114,8 +116,9 @@ pnpm install
 pnpm --filter gig-crawler dev
 ```
 
-The sync also runs on a schedule (daily at 02:00 Athens time by default, via
-`CRON_SCHEDULE`). See `.env.example` for all configuration options.
+There is no built-in scheduler: a sync happens only when you `POST /api/sync`. To run it
+on a regular cadence, point an external scheduler at that endpoint. See `.env.example` for
+all configuration options.
 
 ## Deployment
 

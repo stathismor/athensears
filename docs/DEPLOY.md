@@ -58,15 +58,14 @@ STRAPI_API_URL=http://${{cms.RAILWAY_PRIVATE_DOMAIN}}:1337   # private networkin
 STRAPI_API_TOKEN=<the Full-access token from step 2>
 GEMINI_API_KEY=<your key>
 GEMINI_MODEL=gemini-flash-latest
-TZ=Europe/Athens
-CRON_SCHEDULE=0 4 * * *      # nightly 04:00 Athens
+TZ=Europe/Athens             # container timezone (log timestamps)
 # optional tuning:
 # SYNC_SOURCE_CONCURRENCY=4   SYNC_MAX_DETAIL_PER_SOURCE=30
 # SYNC_PRUNE_GRACE_DAYS=3     GEMINI_RATE_LIMIT_RPM=120     GEMINI_CHUNK_SIZE=6
 # SYNC_API_KEY=<random>       # if set, POST /api/sync requires Authorization: Bearer it
 ```
 
-It has a `/health` check and an embedded nightly cron. Trigger the first run manually:
+It has a `/health` check but no built-in scheduler, so trigger runs via the API. Start the first run:
 `curl -XPOST https://<crawler-url>/api/sync` (add `-H "Authorization: Bearer $SYNC_API_KEY"`
 if you set one). Watch logs; it should finish in a few minutes with `errors: 0`. The same
 endpoint takes options (`force`, `sources`, `clear`, `normalize`, ...) - see
@@ -82,12 +81,13 @@ STRAPI_API_URL=http://${{cms.RAILWAY_PRIVATE_DOMAIN}}:1337   # server-side fetch
 ```
 
 Railway sets `PORT`; the Astro node server binds it. Add a public domain to this service -
-that's the site. It server-renders from Strapi each request, so new nightly gigs and any
+that's the site. It server-renders from Strapi each request, so new gigs and any
 manual CMS edits appear on refresh with no rebuild.
 
 ## Operating notes
-- **Add/fix gigs**: edit in the CMS admin and tick **`manual`** so the nightly crawler won't
-  overwrite or prune it.
+- **Add/fix gigs**: edit in the CMS admin - the gig is automatically marked **`manual`**,
+  so the crawler won't overwrite or prune it (no flag to remember). To take a gig off the
+  site, set its **`status`** to `hidden` or `cancelled`; the crawler won't bring it back.
 - **Add a venue/source**: edit `apps/gig-crawler/src/models/sources.ts` (verify the listing
   URL resolves), commit, redeploy the crawler.
 - **Non-destructive**: runs upsert in place and only prune gigs unseen for

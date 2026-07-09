@@ -77,7 +77,7 @@ cp apps/gig-crawler/.env.example apps/gig-crawler/.env
 
 Required for gig-crawler:
 - `GEMINI_API_KEY` - Get from https://aistudio.google.com/apikey
-- `STRAPI_API_TOKEN` - Create in Strapi admin (Settings > API Tokens). Needs `gig.create`, `gig.find`, `gig.update`, `venue.create`, `venue.find`, `crawl-cache.find`, `crawl-cache.update`.
+- `STRAPI_API_TOKEN` - Create in Strapi admin (Settings > API Tokens). Needs `gig.create`, `gig.find`, `gig.update`, `gig.delete`, `venue.create`, `venue.find`, `crawl-cache.find`, `crawl-cache.update`, `sync-run.create`. (Full access is simplest.)
 
 ## Development
 
