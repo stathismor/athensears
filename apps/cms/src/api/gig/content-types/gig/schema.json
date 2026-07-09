@@ -57,7 +57,7 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["active", "pruned", "cancelled", "hidden"],
+      "enum": ["active", "cancelled", "hidden"],
       "default": "active",
       "required": true
     },

@@ -26,7 +26,7 @@ export const GigSchema = z.object({
 
 export type Gig = z.infer<typeof GigSchema>;
 
-export type GigStatus = "active" | "pruned" | "cancelled" | "hidden";
+export type GigStatus = "active" | "cancelled" | "hidden";
 
 /**
  * Extra write fields for a gig create/update. Only the keys present are sent; Strapi's

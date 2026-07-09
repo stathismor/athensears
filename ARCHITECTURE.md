@@ -210,7 +210,6 @@ Removal is never a silent hard delete. Every gig carries a status.
 | active | Shown on the site | Default for new and current gigs |
 | cancelled | The event was called off | A human |
 | hidden | Deliberately removed from the site | A human |
-| pruned | Legacy - the former auto-prune. No longer set; older rows may still carry it | - |
 
 The web app shows only active, future gigs. When a human sets a gig to hidden or cancelled,
 the crawler treats that as a
@@ -341,7 +340,7 @@ require the crawler's API token.
 | source | Which registry source surfaced this gig (empty for a gig created by hand) |
 | sourceKey | Stable per-event identity within that source; the anchor for run-to-run matching. Set once, never rewritten |
 | manual | The human-ownership lock; set automatically when a person edits or creates the gig |
-| status | active, cancelled, or hidden (older rows may carry a legacy pruned) |
+| status | active, cancelled, or hidden |
 | lastSeenAt | The last crawl run that saw this gig |
 | deletedAt | When the gig was soft-deleted, if it has been |
 
