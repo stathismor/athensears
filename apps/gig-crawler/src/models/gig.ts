@@ -31,7 +31,7 @@ export type GigStatus = "active" | "cancelled" | "hidden";
 /**
  * Extra write fields for a gig create/update. Only the keys present are sent; Strapi's
  * update is a partial merge, so an omitted key leaves the stored value untouched - which
- * the reclean path relies on to preserve status/lastSeenAt/provenance while it rewrites
+ * the repair path relies on to preserve status/lastSeenAt/provenance while it rewrites
  * only titles and venues.
  */
 export interface GigWriteExtra {

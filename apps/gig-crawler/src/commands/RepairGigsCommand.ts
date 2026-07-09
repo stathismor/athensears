@@ -8,7 +8,7 @@ import { activeSources } from "../models/sources.js";
 import { logger } from "../utils/logger.js";
 
 /** A title/venue that the cleaners would rewrite in place. */
-export interface RecleanChange {
+export interface RepairChange {
   documentId: string;
   fromTitle: string;
   toTitle: string;
@@ -17,7 +17,7 @@ export interface RecleanChange {
 }
 
 /** A duplicate that cleaning collapses onto a kept row (the loser is deleted). */
-export interface RecleanMerge {
+export interface RepairMerge {
   keptDocumentId: string;
   deletedDocumentId: string;
   title: string;
@@ -25,7 +25,7 @@ export interface RecleanMerge {
   venue: string;
 }
 
-export interface RecleanReport {
+export interface RepairReport {
   /** All gigs in the CMS. */
   total: number;
   /** Gigs considered (non-manual with a venue). */
@@ -34,8 +34,8 @@ export interface RecleanReport {
   skippedManual: number;
   /** Gigs with no venue relation, skipped (can't safely re-point the venue). */
   skippedNoVenue: number;
-  updated: RecleanChange[];
-  merged: RecleanMerge[];
+  updated: RepairChange[];
+  merged: RepairMerge[];
   unchanged: number;
   errors: number;
 }
@@ -58,10 +58,10 @@ function completeness(g: StoredGig): number {
  * hand-edited (manual) gigs untouched, never re-scrapes, and never drops rows a source no
  * longer lists - it only rewrites what's already stored.
  */
-export class RecleanGigsCommand {
+export class RepairGigsCommand {
   constructor(private readonly gigs: GigsPort) {}
 
-  async execute(): Promise<RecleanReport> {
+  async execute(): Promise<RepairReport> {
     const city = ACTIVE_CITY.nameAliases;
 
     // Specific event page (2) > generic listing page (1) > no link (0) - which link to keep
@@ -70,7 +70,7 @@ export class RecleanGigsCommand {
     const urlScore = (u?: string): number => (!u ? 0 : listingUrls.has(u) ? 1 : 2);
 
     const all = await this.gigs.listAllGigs();
-    const report: RecleanReport = {
+    const report: RepairReport = {
       total: all.length,
       scanned: 0,
       skippedManual: 0,
@@ -181,7 +181,7 @@ export class RecleanGigsCommand {
         }
       } catch (error) {
         report.errors++;
-        logger.error({ error, keeper: group[0]?.gig.documentId }, "Failed to reclean gig group");
+        logger.error({ error, keeper: group[0]?.gig.documentId }, "Failed to repair gig group");
       }
     }
 
@@ -196,7 +196,7 @@ export class RecleanGigsCommand {
         skippedNoVenue: report.skippedNoVenue,
         errors: report.errors,
       },
-      "Reclean complete"
+      "Repair complete"
     );
     return report;
   }

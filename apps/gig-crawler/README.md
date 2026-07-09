@@ -35,15 +35,27 @@ $SYNC_API_KEY` (calls without it get `401`).
 |---|---|---|
 | `/health` | GET | Liveness probe - `{ "status": "ok", ... }`. |
 | `/` | GET | Service info + endpoint list. |
-| `/api/sync` | POST | Trigger a sync, or the reclean backfill. Background, returns immediately. |
+| `/api/sync` | POST | Trigger a sync, or an in-place repair. Background, returns immediately. |
 | `/api/sync/status` | GET | `{ "status": "running" \| "idle", "isRunning": bool }`. |
 | `/api/gigs/delete` | POST | Bulk-delete non-manual gigs. Dry-run by default. |
 
 ### `POST /api/sync`
 
 Non-blocking: starts a background run and returns `{ "status": "started" }` immediately
-(or `409 already_running` if one is in flight - only one sync/reclean runs at a time).
+(or `409 already_running` if one is in flight - only one sync/repair runs at a time).
 Progress and the result summary are logged. Options go in the JSON body; all are optional.
+
+**Which mode when** - the flags do very different things:
+
+| You want to… | Use | Scrapes? | Calls the model? |
+|---|---|---|---|
+| Fetch what's new (the routine case) | *(no flags)* | yes | yes (cache-first) |
+| Re-extract everything ignoring the cache (changed prompt/extraction logic, or a stale cache) | `force: true` | yes | yes (cache bypassed) |
+| Wipe and rebuild from scratch (stored set is badly wrong; **destructive**) | `clear: true` | yes | yes |
+| Fix already-stored titles/venues after changing the cleaning rules, cheaply | `repair: true` | **no** | **no** |
+
+The key split: `force`/`clear` re-fetch from sources; `repair` never touches the network or
+the model - it only re-processes rows already in the DB.
 
 **Scrape mode (default)** - crawl the sources and upsert (create new, update existing auto
 gigs, leave `manual` gigs untouched):
@@ -56,7 +68,7 @@ gigs, leave `manual` gigs untouched):
 | `maxSources` | number | all | Crawl at most N sources (test knob). |
 | `sources` | string[] or CSV | all | Restrict to specific source ids, e.g. `["more.com"]` or `"more.com,fuzz-club"`. Applied before `maxSources`. |
 
-**Reclean mode** (`reclean: true`) - re-apply the title/venue cleaning rules to stored gigs
+**Repair mode** (`repair: true`) - re-apply the title/venue cleaning rules to stored gigs
 **in place**, no scraping and no LLM. Re-runs the same cleaners the sync applies at write
 time over every stored gig, updates rows whose cleaned form changed (keeping their id and
 `manual` flag), and merges duplicates that cleaning collapses onto one row. Idempotent -
@@ -65,9 +77,9 @@ and ignores the scrape-mode fields above.
 
 | Field | Type | Default | Effect |
 |---|---|---|---|
-| `reclean` | bool | `false` | Run the in-place backfill instead of scraping. |
+| `repair` | bool | `false` | Repair stored gigs in place instead of scraping. |
 
-> Reclean applies immediately and **deletes** merged duplicate rows. It's idempotent and
+> Repair applies immediately and **deletes** merged duplicate rows. It's idempotent and
 > the full report is logged, but deletions aren't reversible.
 
 ```bash
@@ -82,9 +94,9 @@ curl -XPOST https://<crawler-url>/api/sync \
 curl -XPOST https://<crawler-url>/api/sync \
   -H 'Content-Type: application/json' -d '{"sources": ["more.com"]}'
 
-# Re-clean stored gig titles/venues in place (backfill)
+# Repair stored gig titles/venues in place (no scrape, no model)
 curl -XPOST https://<crawler-url>/api/sync \
-  -H 'Content-Type: application/json' -d '{"reclean": true}'
+  -H 'Content-Type: application/json' -d '{"repair": true}'
 ```
 
 Add `-H "Authorization: Bearer $SYNC_API_KEY"` when a token is configured.

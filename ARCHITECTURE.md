@@ -73,14 +73,14 @@ serving the last good data even while a crawl is running or failing.
 ## Gig Crawler
 
 A long-running Node service that exposes a small HTTP surface for operating it: a health
-check, a sync trigger, a sync-status probe, a re-clean of stored gigs, and a safe
+check, a sync trigger, a sync-status probe, an in-place repair of stored gigs, and a safe
 bulk-delete endpoint. The state-changing endpoints can be protected by a shared bearer
 token when one is configured.
 
 A sync is a single operation that performs the full discover-extract-filter-store pipeline
 described below. It is triggered on demand through the API; the service has no built-in
 scheduler. The intended cadence is about once a night, achieved by pointing an external
-scheduler at the sync endpoint. Only one sync (or re-clean) runs at a time.
+scheduler at the sync endpoint. Only one sync (or repair) runs at a time.
 
 Discovery is driven by a **curated source registry**, not open-web search. Each source is a
 known Athens venue or a ticketing aggregator, described by one or more listing-page URLs
@@ -265,12 +265,18 @@ endpoints require a matching bearer token.
 |---|---|---|
 | /health | GET | Liveness probe |
 | / | GET | Service info and endpoint list |
-| /api/sync | POST | Trigger a sync, or a re-clean of stored gigs. Runs in the background and returns immediately |
+| /api/sync | POST | Trigger a sync, or an in-place repair of stored gigs. Runs in the background and returns immediately |
 | /api/sync/status | GET | Reports running or idle |
 | /api/gigs/delete | POST | Bulk-delete non-manual gigs. Preview by default |
 
-Only one sync or re-clean runs at a time; a second request while one is in flight is
+Only one sync or repair runs at a time; a second request while one is in flight is
 rejected. Options are passed in the JSON body and are all optional.
+
+The three write modes do very different things. `force` and `clear` both re-fetch from
+sources (differing only in whether existing gigs are wiped first); `repair` never touches
+the network or the model - it only re-processes rows already stored. So: a normal run to
+fetch what's new, `force` to re-extract past a stale cache, `clear` to rebuild from scratch,
+and `repair` to bring stored titles/venues in line after the cleaning rules change.
 
 Sync (scrape) options:
 
@@ -282,11 +288,11 @@ Sync (scrape) options:
 | maxSources | Crawl at most this many sources (a test knob) |
 | sources | Restrict the run to specific source ids, e.g. more-com (a test knob) |
 
-Re-clean options:
+Repair options:
 
 | Option | Effect |
 |---|---|
-| reclean | Re-apply the current title/venue cleaning rules to gigs already stored, in place (no scrape, no model calls). Run it after the cleaning rules change. Idempotent, and it leaves manual gigs untouched |
+| repair | Re-apply the current title/venue cleaning rules to gigs already stored, in place (no scrape, no model calls). Run it after the cleaning rules change. Idempotent, and it leaves manual gigs untouched |
 
 Delete options:
 
@@ -307,9 +313,9 @@ curl -XPOST https://<crawler-url>/api/sync \
 # Preview which non-manual gigs a bulk delete would remove (safe; deletes nothing)
 curl -XPOST https://<crawler-url>/api/gigs/delete
 
-# Re-clean stored titles/venues in place after changing the cleaning rules
+# Repair stored titles/venues in place after changing the cleaning rules
 curl -XPOST https://<crawler-url>/api/sync \
-  -H 'Content-Type: application/json' -d '{"reclean": true}'
+  -H 'Content-Type: application/json' -d '{"repair": true}'
 ```
 
 ---

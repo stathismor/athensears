@@ -5,7 +5,7 @@ import { PlaywrightAdapter } from "./adapters/ContentScraperRepo/PlaywrightAdapt
 import { GeminiAdapter } from "./adapters/GeminiRepo/GeminiAdapter.js";
 import { StrapiAdapter } from "./adapters/StrapiRepo/StrapiAdapter.js";
 import { SyncGigsCommand, type SyncOptions } from "./commands/SyncGigsCommand.js";
-import { RecleanGigsCommand } from "./commands/RecleanGigsCommand.js";
+import { RepairGigsCommand } from "./commands/RepairGigsCommand.js";
 
 const app = express();
 app.use(express.json());
@@ -56,20 +56,20 @@ async function syncGigs(options: SyncOptions = {}) {
   }
 }
 
-// Reclean: re-apply the current title/venue cleaning rules to stored gigs in place (no
+// Repair: re-apply the current title/venue cleaning rules to stored gigs in place (no
 // scrape, no LLM). Runs in the background like syncGigs; the full report is logged inside
 // execute(). Always leaves hand-edited (manual) gigs untouched.
-async function recleanGigs() {
+async function repairGigs() {
   if (isSyncRunning) {
-    logger.warn("Sync already in progress, skipping reclean");
+    logger.warn("Sync already in progress, skipping repair");
     return;
   }
 
   isSyncRunning = true;
   try {
-    await new RecleanGigsCommand(gigsAdapter).execute();
+    await new RepairGigsCommand(gigsAdapter).execute();
   } catch (error) {
-    logger.error({ error }, "Reclean failed");
+    logger.error({ error }, "Repair failed");
   } finally {
     isSyncRunning = false;
   }
@@ -85,9 +85,9 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Manual sync endpoint (non-blocking). The default scrapes; normalize=true instead runs
-// the in-place title/venue backfill. Both run in the background, return immediately, and
-// share the isSyncRunning guard so they never overlap.
+// Manual sync endpoint (non-blocking). The default scrapes; repair=true instead runs
+// the in-place title/venue repair over stored gigs. Both run in the background, return
+// immediately, and share the isSyncRunning guard so they never overlap.
 app.post("/api/sync", (req, res) => {
   if (env.SYNC_API_KEY) {
     const auth = req.headers.authorization;
@@ -114,13 +114,13 @@ app.post("/api/sync", (req, res) => {
     });
   }
 
-  // Reclean mode: re-apply the title/venue cleaning rules to stored gigs in place - no
+  // Repair mode: re-apply the title/venue cleaning rules to stored gigs in place - no
   // scrape, no LLM. Always leaves manual gigs untouched. The report is logged.
-  if (truthy(p.reclean)) {
-    recleanGigs().catch((error) => {
-      logger.error({ error }, "Background reclean failed");
+  if (truthy(p.repair)) {
+    repairGigs().catch((error) => {
+      logger.error({ error }, "Background repair failed");
     });
-    return res.json({ status: "started", message: "Reclean started in background" });
+    return res.json({ status: "started", message: "Repair started in background" });
   }
 
   // Non-destructive by default: upsert into existing gigs. clear=true wipes non-manual
@@ -242,7 +242,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or reclean:true to re-apply the title/venue cleaning rules to stored gigs in place instead of scraping',
+      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or repair:true to re-apply the title/venue cleaning rules to stored gigs in place instead of scraping',
       syncStatus: "/api/sync/status (GET) - Check sync status",
     },
   });

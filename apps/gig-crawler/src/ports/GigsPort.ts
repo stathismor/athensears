@@ -26,7 +26,7 @@ export interface StoredGig {
 export interface SyncRunRecord {
   startedAt: string;
   finishedAt: string;
-  /** How the run was started (e.g. "manual", "scheduler", "reclean"). */
+  /** How the run was started (e.g. "manual", "scheduler", "repair"). */
   trigger: string;
   status: "completed" | "failed";
   /** The run's counters (the SyncStats object). */
@@ -69,7 +69,7 @@ export interface GigsPort {
 
   /**
    * Update an existing gig (by Strapi documentId). `extra` sets manual/status/lastSeenAt;
-   * omitted keys are left untouched (partial update), which the reclean path uses to
+   * omitted keys are left untouched (partial update), which the repair path uses to
    * preserve status/lastSeenAt/provenance while rewriting only the title/venue.
    */
   updateGig(documentId: string, gig: Gig, venueId: number, extra?: GigWriteExtra): Promise<number>;
