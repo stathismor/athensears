@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sync_runs",
+  "info": {
+    "singularName": "sync-run",
+    "pluralName": "sync-runs",
+    "displayName": "Sync Run",
+    "description": "One record per crawl run: the audit trail of the automation (timing, how it was triggered, counts, and which gigs it created/updated/pruned)."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "startedAt": {
+      "type": "datetime"
+    },
+    "finishedAt": {
+      "type": "datetime"
+    },
+    "trigger": {
+      "type": "string",
+      "maxLength": 50
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["completed", "failed"],
+      "default": "completed"
+    },
+    "counts": {
+      "type": "json"
+    },
+    "affected": {
+      "type": "json"
+    },
+    "error": {
+      "type": "text"
+    }
+  }
+}

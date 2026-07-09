@@ -1,6 +1,6 @@
 import type { ScraperPort } from "../ports/ScraperPort.js";
 import type { LLMPort } from "../ports/LLMPort.js";
-import type { GigsPort } from "../ports/GigsPort.js";
+import type { GigsPort, StoredGig } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
 import type { ScrapedContent } from "../models/scrapedContent.js";
 import { activeSources, type GigSource } from "../models/sources.js";
@@ -54,6 +54,8 @@ export interface SyncOptions {
    * LLM. Unknown ids are ignored. Applied before maxSources.
    */
   sources?: string[];
+  /** How the run was triggered, recorded in the run journal (default "manual"). */
+  trigger?: string;
 }
 
 export interface SyncStats {
@@ -69,6 +71,10 @@ export interface SyncStats {
   gigsCreated: number;
   gigsUpdated: number;
   gigsSkippedManual: number;
+  /** Existing gigs a human had removed (hidden/cancelled); left untouched, not resurrected. */
+  gigsSkippedTombstoned: number;
+  /** Unchanged gigs whose lastSeenAt was refreshed via the heartbeat (no content write). */
+  gigsSeen: number;
   gigsPruned: number;
   errors: number;
 }
@@ -156,6 +162,7 @@ export class SyncGigsCommand {
   ) {}
 
   async execute(options: SyncOptions = {}): Promise<SyncStats> {
+    const startedIso = new Date().toISOString();
     const monthsAhead = options.monthsAhead ?? env.SYNC_MONTHS_AHEAD;
     const useCache = options.useCache ?? true;
     const now = new Date();
@@ -176,9 +183,13 @@ export class SyncGigsCommand {
       gigsCreated: 0,
       gigsUpdated: 0,
       gigsSkippedManual: 0,
+      gigsSkippedTombstoned: 0,
+      gigsSeen: 0,
       gigsPruned: 0,
       errors: 0,
     };
+    // Short labels of the gigs this run touched, for the run journal.
+    const affected = { created: [] as string[], updated: [] as string[], pruned: [] as string[] };
 
     let sources = activeSources();
     if (options.sources && options.sources.length > 0) {
@@ -212,131 +223,246 @@ export class SyncGigsCommand {
 
       if (sources.length === 0) {
         logger.warn("No enabled sources in registry, aborting sync");
-        return stats;
-      }
-
-      // Seed/refresh curated venue metadata (website, neighborhood) from the registry
-      // so the site can link venues. (Aggregator-only venues are created name-only later.)
-      for (const s of sources) {
-        if (s.type === "venue" && s.venueName) {
-          try {
-            await this.gigs.upsertVenue({
-              name: s.venueName,
-              website: s.website,
-              neighborhood: s.neighborhood,
-            });
-          } catch (error) {
-            logger.warn({ source: s.id, error }, "Failed to seed venue metadata");
+      } else {
+        // Seed/refresh curated venue metadata (website, neighborhood) from the registry
+        // so the site can link venues. (Aggregator-only venues are created name-only later.)
+        for (const s of sources) {
+          if (s.type === "venue" && s.venueName) {
+            try {
+              await this.gigs.upsertVenue({
+                name: s.venueName,
+                website: s.website,
+                neighborhood: s.neighborhood,
+              });
+            } catch (error) {
+              logger.warn({ source: s.id, error }, "Failed to seed venue metadata");
+            }
           }
         }
-      }
 
-      // Load the extraction cache up front so unchanged pages skip the Gemini call.
-      // Best-effort: a cache failure logs and proceeds without it (see PageExtractionCache).
-      // When useCache is false the cache is explicitly bypassed (no reads, no writes).
-      await this.llm.loadCache?.(useCache);
+        // Load the extraction cache up front so unchanged pages skip the Gemini call.
+        // Best-effort: a cache failure logs and proceeds without it (see PageExtractionCache).
+        // When useCache is false the cache is explicitly bypassed (no reads, no writes).
+        await this.llm.loadCache?.(useCache);
 
-      // Collect gigs from sources in parallel (each stamps its own venue). A worker
-      // pool bounds how many sources scrape/extract at once.
-      const allGigs: Gig[] = [];
-      let nextSource = 0;
-      const collectWorker = async () => {
-        while (nextSource < sources.length) {
-          const source = sources[nextSource++];
-          try {
-            const sourceGigs = await this.collectFromSource(source, dateRange, stats);
-            logger.info(
-              { source: source.id, gigs: sourceGigs.length },
-              "Collected gigs from source"
-            );
-            allGigs.push(...sourceGigs);
-          } catch (error) {
-            logger.error({ source: source.id, error }, "Failed to collect from source");
-            stats.errors++;
+        // Collect gigs from sources in parallel (each stamps its own venue + provenance).
+        // A worker pool bounds how many sources scrape/extract at once.
+        const allGigs: Gig[] = [];
+        let nextSource = 0;
+        const collectWorker = async () => {
+          while (nextSource < sources.length) {
+            const source = sources[nextSource++];
+            try {
+              const sourceGigs = await this.collectFromSource(source, dateRange, stats);
+              const stamped = sourceGigs.map((g) => this.stampProvenance(source, g));
+              logger.info(
+                { source: source.id, gigs: stamped.length },
+                "Collected gigs from source"
+              );
+              allGigs.push(...stamped);
+            } catch (error) {
+              logger.error({ source: source.id, error }, "Failed to collect from source");
+              stats.errors++;
+            }
           }
+        };
+        const sourceConcurrency = Math.max(1, env.SYNC_SOURCE_CONCURRENCY);
+        await Promise.all(
+          Array.from({ length: Math.min(sourceConcurrency, sources.length) }, () => collectWorker())
+        );
+
+        // Persist the extraction cache once, now that all sources have extracted.
+        await this.llm.flushCache?.();
+
+        // Fold the run's cache tallies into the stats summary.
+        const cacheStats = this.llm.getCacheStats?.();
+        if (cacheStats) {
+          stats.pagesFromCache = cacheStats.pagesFromCache;
+          stats.pagesToGemini = cacheStats.pagesToGemini;
         }
-      };
-      const sourceConcurrency = Math.max(1, env.SYNC_SOURCE_CONCURRENCY);
-      await Promise.all(
-        Array.from({ length: Math.min(sourceConcurrency, sources.length) }, () => collectWorker())
-      );
 
-      // Persist the extraction cache once, now that all sources have extracted.
-      await this.llm.flushCache?.();
+        // Collapse cross-source duplicates (same event listed by venue + aggregators)
+        const dedupedGigs = this.dedupeGigs(allGigs, sources);
+        stats.gigsExtracted = dedupedGigs.length;
+        logger.info(
+          { raw: allGigs.length, deduped: dedupedGigs.length },
+          "Extracted gigs across all sources (deduped)"
+        );
 
-      // Fold the run's cache tallies into the stats summary.
-      const cacheStats = this.llm.getCacheStats?.();
-      if (cacheStats) {
-        stats.pagesFromCache = cacheStats.pagesFromCache;
-        stats.pagesToGemini = cacheStats.pagesToGemini;
-      }
+        if (dedupedGigs.length === 0) {
+          logger.warn("No gigs extracted, sync complete (existing gigs left untouched)");
+        } else {
+          // Note: we deliberately do NOT pre-validate event URLs with HEAD requests.
+          // Ticketing/aggregator sites reject or stall HEAD (timeouts), which silently
+          // dropped most valid event links. The URLs come from pages we just scraped, so
+          // we trust them; the occasional dead link is fixable in the CMS.
 
-      // Collapse cross-source duplicates (same event listed by venue + aggregators)
-      const dedupedGigs = this.dedupeGigs(allGigs, sources);
-      stats.gigsExtracted = dedupedGigs.length;
-      logger.info(
-        { raw: allGigs.length, deduped: dedupedGigs.length },
-        "Extracted gigs across all sources (deduped)"
-      );
+          // Upsert into the CMS. Manual and tombstoned (hidden/cancelled) gigs are left
+          // exactly as the human left them. An unchanged gig is only heartbeated (its
+          // lastSeenAt refreshed) so updatedAt stays a truthful "content changed" signal.
+          const nowIso = new Date().toISOString();
+          const seenDocIds: string[] = [];
+          for (const gig of dedupedGigs) {
+            try {
+              const existing = await this.gigs.findExistingGig(gig);
 
-      if (dedupedGigs.length === 0) {
-        logger.warn("No gigs extracted, sync complete (existing gigs left untouched)");
-        return stats;
-      }
+              if (existing?.manual) {
+                logger.info(
+                  { title: gig.title, date: gig.date },
+                  "Leaving hand-edited (manual) gig untouched"
+                );
+                stats.gigsSkippedManual++;
+                continue;
+              }
 
-      // Note: we deliberately do NOT pre-validate event URLs with HEAD requests.
-      // Ticketing/aggregator sites reject or stall HEAD (timeouts), which silently
-      // dropped most valid event links. The URLs come from pages we just scraped, so
-      // we trust them; the occasional dead link is fixable in the CMS.
+              if (existing && (existing.status === "hidden" || existing.status === "cancelled")) {
+                logger.info(
+                  { title: gig.title, status: existing.status },
+                  "Leaving removed (tombstoned) gig untouched"
+                );
+                stats.gigsSkippedTombstoned++;
+                continue;
+              }
 
-      // Upsert into the CMS
-      for (const gig of dedupedGigs) {
-        try {
-          const existing = await this.gigs.findGig(gig.title, gig.date);
+              const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
 
-          if (existing?.manual) {
-            logger.info(
-              { title: gig.title, date: gig.date },
-              "Leaving hand-edited (manual) gig untouched"
-            );
-            stats.gigsSkippedManual++;
-            continue;
+              if (existing) {
+                if (this.gigChanged(existing, gig)) {
+                  await this.gigs.updateGig(existing.documentId, gig, venueId, {
+                    manual: false,
+                    status: "active",
+                    lastSeenAt: nowIso,
+                  });
+                  stats.gigsUpdated++;
+                  affected.updated.push(this.gigLabel(gig));
+                } else {
+                  seenDocIds.push(existing.documentId);
+                }
+              } else {
+                await this.gigs.createGig(gig, venueId);
+                stats.gigsCreated++;
+                affected.created.push(this.gigLabel(gig));
+              }
+            } catch (error) {
+              logger.error({ gig: gig.title, error }, "Failed to store gig");
+              stats.errors++;
+            }
           }
 
-          const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
-
-          if (existing) {
-            await this.gigs.updateGig(existing.documentId, gig, venueId);
-            stats.gigsUpdated++;
-          } else {
-            await this.gigs.createGig(gig, venueId);
-            stats.gigsCreated++;
+          // Heartbeat the unchanged-but-seen gigs in one call (refreshes lastSeenAt,
+          // re-activates any that had been pruned) without bumping updatedAt.
+          if (seenDocIds.length > 0) {
+            try {
+              stats.gigsSeen = await this.gigs.markSeen(seenDocIds);
+            } catch (error) {
+              logger.error({ error }, "Heartbeat (markSeen) failed (non-fatal)");
+            }
           }
-        } catch (error) {
-          logger.error({ gig: gig.title, error }, "Failed to store gig");
-          stats.errors++;
-        }
-      }
 
-      // Debounced prune: drop future, non-manual gigs not seen (updated) in the last
-      // SYNC_PRUNE_GRACE_DAYS, so cancelled/removed gigs age out. Skipped entirely when
-      // this run stored nothing - a failed scrape must never wipe the site.
-      if (env.SYNC_PRUNE_GRACE_DAYS > 0 && stats.gigsCreated + stats.gigsUpdated > 0) {
-        const cutoff = new Date(now.getTime() - env.SYNC_PRUNE_GRACE_DAYS * 86_400_000);
-        try {
-          stats.gigsPruned = await this.gigs.pruneStaleGigs(cutoff);
-        } catch (error) {
-          logger.error({ error }, "Prune step failed (non-fatal)");
+          // Debounced prune (soft): drop future, non-manual, active gigs not seen in the
+          // last SYNC_PRUNE_GRACE_DAYS. Skipped entirely when this run saw nothing - a
+          // failed scrape must never wipe the site.
+          if (
+            env.SYNC_PRUNE_GRACE_DAYS > 0 &&
+            stats.gigsCreated + stats.gigsUpdated + stats.gigsSeen > 0
+          ) {
+            const cutoff = new Date(now.getTime() - env.SYNC_PRUNE_GRACE_DAYS * 86_400_000);
+            try {
+              const prunedGigs = await this.gigs.pruneStaleGigs(cutoff);
+              stats.gigsPruned = prunedGigs.length;
+              affected.pruned = prunedGigs.map((p) => `${p.title} (${p.date.slice(0, 10)})`);
+            } catch (error) {
+              logger.error({ error }, "Prune step failed (non-fatal)");
+            }
+          }
         }
       }
 
       logger.info({ stats }, "=== Sync Complete ===");
+      await this.recordRun(startedIso, options, stats, affected, "completed");
       return stats;
     } catch (error) {
       logger.error({ error }, "Fatal error during sync");
       stats.errors++;
+      await this.recordRun(
+        startedIso,
+        options,
+        stats,
+        affected,
+        "failed",
+        error instanceof Error ? error.message : String(error)
+      );
       throw error;
     }
+  }
+
+  /** Stamp the source id and a stable per-event key (its specific event URL) onto a gig. */
+  private stampProvenance(source: GigSource, gig: Gig): Gig {
+    const isSpecific = !!gig.url && !source.listingUrls.includes(gig.url);
+    const sourceKey = isSpecific ? gig.url!.split("#")[0].replace(/\/+$/, "") : undefined;
+    return { ...gig, source: source.id, sourceKey };
+  }
+
+  /**
+   * True if the extracted gig differs from what's stored in a way a partial update would
+   * actually change. Fields the crawler leaves undefined are ignored (a partial update
+   * omits them, preserving the stored value), so unchanged gigs don't churn updatedAt.
+   */
+  private gigChanged(existing: StoredGig, gig: Gig): boolean {
+    if (existing.title !== gig.title) {
+      return true;
+    }
+    if (existing.date.toISOString() !== gig.date.toISOString()) {
+      return true;
+    }
+    if (
+      normalizeVenueName(existing.venueName).toLowerCase() !==
+      normalizeVenueName(gig.venueName).toLowerCase()
+    ) {
+      return true;
+    }
+    if (JSON.stringify(existing.genres ?? []) !== JSON.stringify(gig.genres ?? [])) {
+      return true;
+    }
+    if (gig.price !== undefined && (existing.price ?? undefined) !== gig.price) {
+      return true;
+    }
+    if (gig.description !== undefined && (existing.description ?? undefined) !== gig.description) {
+      return true;
+    }
+    if (gig.url !== undefined && (existing.url ?? undefined) !== gig.url) {
+      return true;
+    }
+    if (gig.source !== undefined && (existing.source ?? undefined) !== gig.source) {
+      return true;
+    }
+    if (gig.sourceKey !== undefined && (existing.sourceKey ?? undefined) !== gig.sourceKey) {
+      return true;
+    }
+    return false;
+  }
+
+  private gigLabel(gig: Gig): string {
+    return `${gig.title} (${gig.date.toISOString().slice(0, 10)})`;
+  }
+
+  private async recordRun(
+    startedAt: string,
+    options: SyncOptions,
+    stats: SyncStats,
+    affected: { created: string[]; updated: string[]; pruned: string[] },
+    status: "completed" | "failed",
+    error?: string
+  ): Promise<void> {
+    await this.gigs.recordSyncRun({
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      trigger: options.trigger ?? "manual",
+      status,
+      counts: { ...stats },
+      affected,
+      error,
+    });
   }
 
   /**

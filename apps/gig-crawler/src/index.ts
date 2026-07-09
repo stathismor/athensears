@@ -5,7 +5,7 @@ import { PlaywrightAdapter } from "./adapters/ContentScraperRepo/PlaywrightAdapt
 import { GeminiAdapter } from "./adapters/GeminiRepo/GeminiAdapter.js";
 import { StrapiAdapter } from "./adapters/StrapiRepo/StrapiAdapter.js";
 import { SyncGigsCommand, type SyncOptions } from "./commands/SyncGigsCommand.js";
-import { NormalizeGigsCommand } from "./commands/NormalizeGigsCommand.js";
+import { RecleanGigsCommand } from "./commands/RecleanGigsCommand.js";
 
 const app = express();
 app.use(express.json());
@@ -56,19 +56,20 @@ async function syncGigs(options: SyncOptions = {}) {
   }
 }
 
-// Normalize/backfill: re-clean stored gig titles/venues in place (no scrape, no LLM).
-// Runs in the background like syncGigs; the full report is logged inside execute().
-async function normalizeGigs(options: { includeManual?: boolean } = {}) {
+// Reclean: re-apply the current title/venue cleaning rules to stored gigs in place (no
+// scrape, no LLM). Runs in the background like syncGigs; the full report is logged inside
+// execute(). Always leaves hand-edited (manual) gigs untouched.
+async function recleanGigs() {
   if (isSyncRunning) {
-    logger.warn("Sync already in progress, skipping normalize");
+    logger.warn("Sync already in progress, skipping reclean");
     return;
   }
 
   isSyncRunning = true;
   try {
-    await new NormalizeGigsCommand(gigsAdapter).execute(options);
+    await new RecleanGigsCommand(gigsAdapter).execute();
   } catch (error) {
-    logger.error({ error }, "Normalize failed");
+    logger.error({ error }, "Reclean failed");
   } finally {
     isSyncRunning = false;
   }
@@ -113,27 +114,28 @@ app.post("/api/sync", (req, res) => {
     });
   }
 
-  // Normalize/backfill mode: re-clean stored gig titles/venues in place - no scrape, no
-  // LLM. includeManual:true also re-cleans hand-edited gigs. The report is logged.
-  if (truthy(p.normalize)) {
-    const includeManual = truthy(p.includeManual);
-    normalizeGigs({ includeManual }).catch((error) => {
-      logger.error({ error }, "Background normalize failed");
+  // Reclean mode: re-apply the title/venue cleaning rules to stored gigs in place - no
+  // scrape, no LLM. Always leaves manual gigs untouched. The report is logged.
+  if (truthy(p.reclean)) {
+    recleanGigs().catch((error) => {
+      logger.error({ error }, "Background reclean failed");
     });
-    return res.json({ status: "started", message: "Normalize started in background" });
+    return res.json({ status: "started", message: "Reclean started in background" });
   }
 
   // Non-destructive by default: upsert into existing gigs. clear=true wipes non-manual
   // gigs first (rarely needed; a normal run already refreshes).
   const clearExisting = truthy(p.clear);
-  // Cache on by default; cache=false or force=true bypasses it (full re-extraction).
-  const useCache = !(p.cache === false || p.cache === "false" || truthy(p.force));
+  // Cache on by default; force=true bypasses it (full re-extraction).
+  const useCache = !truthy(p.force);
   const monthsAhead = num(p.monthsAhead);
   // Small-scale test knob: cap how many sources are crawled.
   const maxSources = num(p.maxSources);
   // Test a specific source (or a few): {"sources":["more.com"]} or {"sources":"more.com,fuzz-club"}.
   // Pick a deterministic source like more.com to test without spending on the LLM.
   const sources = normalizeSources(p.sources);
+  // Recorded in the run journal; defaults to "manual" (an external scheduler can pass its own).
+  const trigger = typeof p.trigger === "string" ? p.trigger : "manual";
 
   const options: SyncOptions = {
     clearExisting,
@@ -141,6 +143,7 @@ app.post("/api/sync", (req, res) => {
     useCache,
     maxSources,
     sources,
+    trigger,
   };
   logger.info({ options }, "Manual sync triggered via API");
 
@@ -239,7 +242,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force|cache:false (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or normalize:true to re-clean stored gig titles/venues in place instead of scraping (includeManual:true also re-cleans manual gigs)',
+      sync: '/api/sync (POST) - Start background sync. JSON body options: clear, monthsAhead, force (bypass cache), maxSources, sources (e.g. ["more.com"] - restrict to specific sources). Or reclean:true to re-apply the title/venue cleaning rules to stored gigs in place instead of scraping',
       syncStatus: "/api/sync/status (GET) - Check sync status",
     },
   });

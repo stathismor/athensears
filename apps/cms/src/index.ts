@@ -46,6 +46,24 @@ export default {
       strapi.log.info(`Backfilled manual=false on ${fixed.count} gig(s)`);
     }
 
+    // Backfill status + lastSeenAt on legacy rows that predate these fields, so the prune
+    // step (which keys off lastSeenAt) and the public site filter (status=active) behave.
+    const statusFixed = await strapi.db.query('api::gig.gig').updateMany({
+      where: { status: { $null: true } },
+      data: { status: 'active' },
+    });
+    if (statusFixed?.count) {
+      strapi.log.info(`Backfilled status=active on ${statusFixed.count} gig(s)`);
+    }
+    // Seed lastSeenAt from updatedAt where unset. Column-to-column copy, so raw SQL.
+    const seeded = await strapi.db
+      .connection('gigs')
+      .whereNull('last_seen_at')
+      .update({ last_seen_at: strapi.db.connection.ref('updated_at') });
+    if (seeded) {
+      strapi.log.info(`Seeded lastSeenAt from updatedAt on ${seeded} gig(s)`);
+    }
+
     // Seed demo data only when explicitly enabled (SEED_SAMPLE_DATA=true) and the DB is
     // empty. Off by default so a fresh production deploy isn't populated with sample gigs
     // before the crawler's first run.

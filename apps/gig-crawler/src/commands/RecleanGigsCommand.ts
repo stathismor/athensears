@@ -7,13 +7,8 @@ import { ACTIVE_CITY } from "../models/city.js";
 import { activeSources } from "../models/sources.js";
 import { logger } from "../utils/logger.js";
 
-export interface NormalizeOptions {
-  /** Also re-clean hand-edited (manual) gigs (default false - they're left untouched). */
-  includeManual?: boolean;
-}
-
 /** A title/venue that the cleaners would rewrite in place. */
-export interface NormalizeChange {
+export interface RecleanChange {
   documentId: string;
   fromTitle: string;
   toTitle: string;
@@ -22,7 +17,7 @@ export interface NormalizeChange {
 }
 
 /** A duplicate that cleaning collapses onto a kept row (the loser is deleted). */
-export interface NormalizeMerge {
+export interface RecleanMerge {
   keptDocumentId: string;
   deletedDocumentId: string;
   title: string;
@@ -30,18 +25,17 @@ export interface NormalizeMerge {
   venue: string;
 }
 
-export interface NormalizeReport {
-  includeManual: boolean;
+export interface RecleanReport {
   /** All gigs in the CMS. */
   total: number;
-  /** Gigs considered (non-manual, or all when includeManual). */
+  /** Gigs considered (non-manual with a venue). */
   scanned: number;
-  /** Manual gigs left untouched (0 when includeManual). */
+  /** Manual gigs left untouched. */
   skippedManual: number;
   /** Gigs with no venue relation, skipped (can't safely re-point the venue). */
   skippedNoVenue: number;
-  updated: NormalizeChange[];
-  merged: NormalizeMerge[];
+  updated: RecleanChange[];
+  merged: RecleanMerge[];
   unchanged: number;
   errors: number;
 }
@@ -52,22 +46,22 @@ function completeness(g: StoredGig): number {
 }
 
 /**
- * Reconcile stored gigs with the current cleaning rules, in place. For every considered
- * gig it re-runs `cleanEventTitle` + `normalizeVenueName` (the same functions the sync
- * applies at write time) and, where the result differs, updates the row - preserving its
- * documentId (so permalinks survive) and its `manual` flag. When cleaning collapses two
- * rows onto the same title+day+venue, it keeps the better-linked/more-complete one,
- * backfills its missing fields from the duplicate, and deletes the duplicate.
+ * Re-apply the current cleaning rules to gigs already stored, in place. For every
+ * considered gig it re-runs `cleanEventTitle` + `normalizeVenueName` (the same functions
+ * the sync applies at write time) and, where the result differs, updates the row -
+ * preserving its documentId (so permalinks survive) and its status/provenance/lastSeenAt
+ * (Strapi's partial update leaves untouched anything we don't send). When cleaning
+ * collapses two rows onto the same title+day+venue, it keeps the better-linked/more-complete
+ * one, backfills its missing fields from the duplicate, and deletes the duplicate.
  *
- * Idempotent and non-destructive to manual gigs by default: safe to re-run whenever the
- * cleaning rules change. Unlike `clear`, it never re-scrapes and never drops rows that a
- * source no longer lists - it only rewrites what's already stored.
+ * Idempotent and safe to re-run whenever the cleaning rules change. It always leaves
+ * hand-edited (manual) gigs untouched, never re-scrapes, and never drops rows a source no
+ * longer lists - it only rewrites what's already stored.
  */
-export class NormalizeGigsCommand {
+export class RecleanGigsCommand {
   constructor(private readonly gigs: GigsPort) {}
 
-  async execute(options: NormalizeOptions = {}): Promise<NormalizeReport> {
-    const includeManual = options.includeManual ?? false;
+  async execute(): Promise<RecleanReport> {
     const city = ACTIVE_CITY.nameAliases;
 
     // Specific event page (2) > generic listing page (1) > no link (0) - which link to keep
@@ -76,8 +70,7 @@ export class NormalizeGigsCommand {
     const urlScore = (u?: string): number => (!u ? 0 : listingUrls.has(u) ? 1 : 2);
 
     const all = await this.gigs.listAllGigs();
-    const report: NormalizeReport = {
-      includeManual,
+    const report: RecleanReport = {
       total: all.length,
       scanned: 0,
       skippedManual: 0,
@@ -88,9 +81,9 @@ export class NormalizeGigsCommand {
       errors: 0,
     };
 
-    // Consider auto gigs by default; manual only when opted in.
+    // Consider auto gigs only; hand-edited (manual) gigs are always left alone.
     const considered = all.filter((g) => {
-      if (!includeManual && g.manual) {
+      if (g.manual) {
         report.skippedManual++;
         return false;
       }
@@ -168,7 +161,10 @@ export class NormalizeGigsCommand {
             toVenue: merged.venueName,
           });
           const venueId = await this.gigs.getOrCreateVenue(merged.venueName);
-          await this.gigs.updateGig(keeper.gig.documentId, merged, venueId, keeper.gig.manual);
+          // Partial update: status/lastSeenAt/provenance are omitted, so they're preserved.
+          await this.gigs.updateGig(keeper.gig.documentId, merged, venueId, {
+            manual: keeper.gig.manual,
+          });
         } else {
           report.unchanged++;
         }
@@ -185,13 +181,12 @@ export class NormalizeGigsCommand {
         }
       } catch (error) {
         report.errors++;
-        logger.error({ error, keeper: group[0]?.gig.documentId }, "Failed to normalize gig group");
+        logger.error({ error, keeper: group[0]?.gig.documentId }, "Failed to reclean gig group");
       }
     }
 
     logger.info(
       {
-        includeManual,
         total: report.total,
         scanned: report.scanned,
         updated: report.updated.length,
@@ -201,7 +196,7 @@ export class NormalizeGigsCommand {
         skippedNoVenue: report.skippedNoVenue,
         errors: report.errors,
       },
-      "Normalize complete"
+      "Reclean complete"
     );
     return report;
   }

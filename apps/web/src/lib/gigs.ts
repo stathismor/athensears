@@ -37,7 +37,8 @@ export async function fetchGigs(
   { attempts = 3, timeoutMs = 6000 }: { attempts?: number; timeoutMs?: number } = {}
 ): Promise<Gig[]> {
   const today = new Date().toISOString().split('T')[0];
-  const url = `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}&pagination[limit]=300`;
+  // Only active gigs: pruned/cancelled/hidden are soft-deleted and must not show on the site.
+  const url = `${strapiUrl}/api/gigs?populate=venue&sort=date:asc&filters[date][$gte]=${today}&filters[status][$eq]=active&pagination[limit]=300`;
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {

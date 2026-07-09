@@ -14,9 +14,31 @@ export const GigSchema = z.object({
    */
   genres: z.array(z.string()),
   imageUrl: z.string().optional(),
+  /** Registry id of the source that surfaced this gig (e.g. "more-com"). Provenance. */
+  source: z.string().optional(),
+  /**
+   * Stable per-event identity within that source (its specific event URL, canonicalized).
+   * Set once at collection and never rewritten, so the same event matches run-to-run even
+   * after its title is edited by hand. Absent when the gig has no specific event link.
+   */
+  sourceKey: z.string().optional(),
 });
 
 export type Gig = z.infer<typeof GigSchema>;
+
+export type GigStatus = "active" | "pruned" | "cancelled" | "hidden";
+
+/**
+ * Extra write fields for a gig create/update. Only the keys present are sent; Strapi's
+ * update is a partial merge, so an omitted key leaves the stored value untouched - which
+ * the reclean path relies on to preserve status/lastSeenAt/provenance while it rewrites
+ * only titles and venues.
+ */
+export interface GigWriteExtra {
+  manual?: boolean;
+  status?: GigStatus;
+  lastSeenAt?: string;
+}
 
 export const StrapiGigSchema = z.object({
   data: z.object({
@@ -27,21 +49,23 @@ export const StrapiGigSchema = z.object({
     price: z.string().optional(),
     url: z.string().optional(),
     genres: z.array(z.string()),
-    // Always written false by the crawler so the column is never null (null slips past
-    // "not manual" filters). Only ever called for auto gigs; manual gigs are skipped upstream.
-    manual: z.boolean(),
-    // imageUrl removed - Strapi schema doesn't support it
+    source: z.string().optional(),
+    sourceKey: z.string().optional(),
+    manual: z.boolean().optional(),
+    status: z.string().optional(),
+    lastSeenAt: z.string().optional(),
+    // imageUrl / deletedAt intentionally excluded - not written by the crawler here
   }),
 });
 
 export type StrapiGig = z.infer<typeof StrapiGigSchema>;
 
 /**
- * `manual` defaults to false - the crawler only ever writes auto gigs, so callers omit it.
- * The normalize/backfill path passes the row's existing flag through, so re-cleaning a
- * hand-edited gig (opt-in) doesn't silently demote it to auto.
+ * Build the Strapi write payload. `source`/`sourceKey`/content come from the gig;
+ * `manual`/`status`/`lastSeenAt` come from `extra`. Any field that resolves to undefined
+ * is dropped from the JSON body, so Strapi's partial update leaves that column as-is.
  */
-export function toStrapiGig(gig: Gig, venueId: number, manual = false): StrapiGig {
+export function toStrapiGig(gig: Gig, venueId: number, extra: GigWriteExtra = {}): StrapiGig {
   return {
     data: {
       title: gig.title,
@@ -51,8 +75,11 @@ export function toStrapiGig(gig: Gig, venueId: number, manual = false): StrapiGi
       price: gig.price,
       url: gig.url,
       genres: gig.genres,
-      manual,
-      // imageUrl intentionally excluded - Strapi schema doesn't support it
+      source: gig.source,
+      sourceKey: gig.sourceKey,
+      manual: extra.manual,
+      status: extra.status,
+      lastSeenAt: extra.lastSeenAt,
     },
   };
 }

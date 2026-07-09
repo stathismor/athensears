@@ -26,4 +26,27 @@ export default factories.createCoreController('api::gig.gig', ({ strapi }) => ({
       ctx.throw(500, `Failed to delete gigs: ${error.message}`);
     }
   },
+
+  /**
+   * Heartbeat: mark a batch of gigs as seen by the current crawl. Sets lastSeenAt (which
+   * the prune step keys off) and re-activates anything that had been pruned. Deliberately
+   * writes the columns directly so it does NOT bump `updatedAt` - that timestamp is
+   * reserved for real content changes, so the admin can trust it. Body: { documentIds: [] }.
+   */
+  async markSeen(ctx) {
+    const documentIds: unknown = ctx.request.body?.documentIds;
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return ctx.send({ data: { updated: 0 } });
+    }
+    try {
+      const ids = documentIds.map(String);
+      const updated = await strapi.db
+        .connection('gigs')
+        .whereIn('document_id', ids)
+        .update({ last_seen_at: new Date(), status: 'active' });
+      return ctx.send({ data: { updated } });
+    } catch (error) {
+      ctx.throw(500, `Failed to mark gigs seen: ${error.message}`);
+    }
+  },
 }));
