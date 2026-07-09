@@ -1,5 +1,4 @@
 import express from "express";
-import cron from "node-cron";
 import { env } from "./models/env.js";
 import { logger } from "./utils/logger.js";
 import { PlaywrightAdapter } from "./adapters/ContentScraperRepo/PlaywrightAdapter.js";
@@ -245,19 +244,6 @@ app.get("/", (req, res) => {
     },
   });
 });
-
-// Schedule cron job
-logger.info({ schedule: env.CRON_SCHEDULE, timezone: env.TZ }, "Scheduling cron job");
-
-cron.schedule(
-  env.CRON_SCHEDULE,
-  () => {
-    syncGigs();
-  },
-  {
-    timezone: env.TZ,
-  }
-);
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

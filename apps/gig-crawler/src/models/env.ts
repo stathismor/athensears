@@ -16,10 +16,6 @@ export const EnvSchema = z.object({
   PORT: z.string().default("3000"),
   NODE_ENV: z.string().default("development"),
 
-  // Cron
-  CRON_SCHEDULE: z.string().default("0 2 * * *"),
-  TZ: z.string().default("Europe/Athens"),
-
   // Scraper
   SCRAPER_CONCURRENCY: z.string().default("5"),
 
