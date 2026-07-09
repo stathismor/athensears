@@ -36,8 +36,8 @@ export default {
     }
 
     // Normalize any legacy gigs with manual = null to false. Null predates the field
-    // default and slips past "not manual" filters (SQL: NULL != true is unknown), so
-    // such rows never prune. Idempotent - a no-op once every row has a real boolean.
+    // default and slips past "not manual" filters (SQL: NULL != true is unknown), so such
+    // rows escape crawler updates. Idempotent - a no-op once every row has a real boolean.
     const fixed = await strapi.db.query('api::gig.gig').updateMany({
       where: { manual: { $null: true } },
       data: { manual: false },
@@ -46,8 +46,8 @@ export default {
       strapi.log.info(`Backfilled manual=false on ${fixed.count} gig(s)`);
     }
 
-    // Backfill status + lastSeenAt on legacy rows that predate these fields, so the prune
-    // step (which keys off lastSeenAt) and the public site filter (status=active) behave.
+    // Backfill status + lastSeenAt on legacy rows that predate these fields, so the public
+    // site filter (status=active) and provenance behave.
     const statusFixed = await strapi.db.query('api::gig.gig').updateMany({
       where: { status: { $null: true } },
       data: { status: 'active' },

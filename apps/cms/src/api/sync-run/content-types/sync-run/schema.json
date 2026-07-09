@@ -5,7 +5,7 @@
     "singularName": "sync-run",
     "pluralName": "sync-runs",
     "displayName": "Sync Run",
-    "description": "One record per crawl run: the audit trail of the automation (timing, how it was triggered, counts, and which gigs it created/updated/pruned)."
+    "description": "One record per crawl run: the audit trail of the automation (timing, how it was triggered, counts, and which gigs it created/updated)."
   },
   "options": {
     "draftAndPublish": false

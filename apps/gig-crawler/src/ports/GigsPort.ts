@@ -75,8 +75,8 @@ export interface GigsPort {
   updateGig(documentId: string, gig: Gig, venueId: number, extra?: GigWriteExtra): Promise<number>;
 
   /**
-   * Mark gigs as seen by the current run: refresh lastSeenAt and re-activate any that were
-   * pruned, WITHOUT bumping updatedAt (so updatedAt stays a truthful "content changed"
+   * Mark gigs as seen by the current run: refresh lastSeenAt and re-activate any that had
+   * been removed, WITHOUT bumping updatedAt (so updatedAt stays a truthful "content changed"
    * signal). Used for gigs whose content did not change this run. Returns rows affected.
    */
   markSeen(documentIds: string[]): Promise<number>;

@@ -28,10 +28,10 @@ export default factories.createCoreController('api::gig.gig', ({ strapi }) => ({
   },
 
   /**
-   * Heartbeat: mark a batch of gigs as seen by the current crawl. Sets lastSeenAt (which
-   * the prune step keys off) and re-activates anything that had been pruned. Deliberately
-   * writes the columns directly so it does NOT bump `updatedAt` - that timestamp is
-   * reserved for real content changes, so the admin can trust it. Body: { documentIds: [] }.
+   * Heartbeat: mark a batch of gigs as seen by the current crawl. Refreshes lastSeenAt
+   * (provenance) and re-activates any gig that was previously removed. Deliberately writes
+   * the columns directly so it does NOT bump `updatedAt` - that timestamp is reserved for
+   * real content changes, so the admin can trust it. Body: { documentIds: [] }.
    */
   async markSeen(ctx) {
     const documentIds: unknown = ctx.request.body?.documentIds;

@@ -68,7 +68,7 @@ TZ=Europe/Athens             # container timezone (log timestamps)
 It has a `/health` check but no built-in scheduler, so trigger runs via the API. Start the first run:
 `curl -XPOST https://<crawler-url>/api/sync` (add `-H "Authorization: Bearer $SYNC_API_KEY"`
 if you set one). Watch logs; it should finish in a few minutes with `errors: 0`. The same
-endpoint takes options (`force`, `sources`, `clear`, `normalize`, ...) - see
+endpoint takes options (`force`, `sources`, `clear`, `reclean`, ...) - see
 `apps/gig-crawler/README.md` for the full API.
 
 ## 4. Web (SSR) - `apps/web/Dockerfile`
