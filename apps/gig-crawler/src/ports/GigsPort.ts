@@ -22,13 +22,6 @@ export interface StoredGig {
   sourceKey?: string;
 }
 
-/** A gig soft-deleted by the prune step, returned so the run journal can list it. */
-export interface PrunedGig {
-  documentId: string;
-  title: string;
-  date: string;
-}
-
 /** One crawl run's journal entry. */
 export interface SyncRunRecord {
   startedAt: string;
@@ -38,8 +31,8 @@ export interface SyncRunRecord {
   status: "completed" | "failed";
   /** The run's counters (the SyncStats object). */
   counts: Record<string, number>;
-  /** Short labels of the gigs created, updated and pruned this run. */
-  affected: { created: string[]; updated: string[]; pruned: string[] };
+  /** Short labels of the gigs created and updated this run. */
+  affected: { created: string[]; updated: string[] };
   error?: string;
 }
 
@@ -109,13 +102,6 @@ export interface GigsPort {
    * Delete all gigs
    */
   deleteAllGigs(): Promise<number>;
-
-  /**
-   * Soft-delete stale auto gigs: set status=pruned + deletedAt on non-manual, active,
-   * future-dated gigs whose lastSeenAt is older than `notSeenSince` (not seen by recent
-   * crawls). Returns the pruned gigs so the run journal can list them.
-   */
-  pruneStaleGigs(notSeenSince: Date): Promise<PrunedGig[]>;
 
   /**
    * Append a run to the sync-run journal. Best-effort: implementations must not throw.

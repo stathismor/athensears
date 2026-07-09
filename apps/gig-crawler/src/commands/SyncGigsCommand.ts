@@ -75,7 +75,6 @@ export interface SyncStats {
   gigsSkippedTombstoned: number;
   /** Unchanged gigs whose lastSeenAt was refreshed via the heartbeat (no content write). */
   gigsSeen: number;
-  gigsPruned: number;
   errors: number;
 }
 
@@ -185,11 +184,10 @@ export class SyncGigsCommand {
       gigsSkippedManual: 0,
       gigsSkippedTombstoned: 0,
       gigsSeen: 0,
-      gigsPruned: 0,
       errors: 0,
     };
     // Short labels of the gigs this run touched, for the run journal.
-    const affected = { created: [] as string[], updated: [] as string[], pruned: [] as string[] };
+    const affected = { created: [] as string[], updated: [] as string[] };
 
     let sources = activeSources();
     if (options.sources && options.sources.length > 0) {
@@ -350,29 +348,12 @@ export class SyncGigsCommand {
           }
 
           // Heartbeat the unchanged-but-seen gigs in one call (refreshes lastSeenAt,
-          // re-activates any that had been pruned) without bumping updatedAt.
+          // re-activates any that had been hidden) without bumping updatedAt.
           if (seenDocIds.length > 0) {
             try {
               stats.gigsSeen = await this.gigs.markSeen(seenDocIds);
             } catch (error) {
               logger.error({ error }, "Heartbeat (markSeen) failed (non-fatal)");
-            }
-          }
-
-          // Debounced prune (soft): drop future, non-manual, active gigs not seen in the
-          // last SYNC_PRUNE_GRACE_DAYS. Skipped entirely when this run saw nothing - a
-          // failed scrape must never wipe the site.
-          if (
-            env.SYNC_PRUNE_GRACE_DAYS > 0 &&
-            stats.gigsCreated + stats.gigsUpdated + stats.gigsSeen > 0
-          ) {
-            const cutoff = new Date(now.getTime() - env.SYNC_PRUNE_GRACE_DAYS * 86_400_000);
-            try {
-              const prunedGigs = await this.gigs.pruneStaleGigs(cutoff);
-              stats.gigsPruned = prunedGigs.length;
-              affected.pruned = prunedGigs.map((p) => `${p.title} (${p.date.slice(0, 10)})`);
-            } catch (error) {
-              logger.error({ error }, "Prune step failed (non-fatal)");
             }
           }
         }
@@ -450,7 +431,7 @@ export class SyncGigsCommand {
     startedAt: string,
     options: SyncOptions,
     stats: SyncStats,
-    affected: { created: string[]; updated: string[]; pruned: string[] },
+    affected: { created: string[]; updated: string[] },
     status: "completed" | "failed",
     error?: string
   ): Promise<void> {

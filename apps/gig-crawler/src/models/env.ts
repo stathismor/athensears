@@ -61,11 +61,6 @@ export const EnvSchema = z.object({
     .default("true")
     .transform((v) => v !== "false" && v !== "0"),
 
-  // Prune auto gigs not seen (updated) by a crawl in this many days. Acts as a
-  // debounce: a gig must be missed by this many consecutive runs before removal,
-  // so a single flaky scrape can't delete a still-valid gig. Set 0 to disable.
-  SYNC_PRUNE_GRACE_DAYS: z.coerce.number().default(3),
-
   // Extraction cache. Skips the Gemini extraction call for a scraped page whose
   // content is byte-identical to a recent run (event detail pages rarely change),
   // replaying the cached gigs instead - the dominant cost saver. Persisted in the

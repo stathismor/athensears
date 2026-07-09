@@ -61,7 +61,7 @@ GEMINI_MODEL=gemini-flash-latest
 TZ=Europe/Athens             # container timezone (log timestamps)
 # optional tuning:
 # SYNC_SOURCE_CONCURRENCY=4   SYNC_MAX_DETAIL_PER_SOURCE=30
-# SYNC_PRUNE_GRACE_DAYS=3     GEMINI_RATE_LIMIT_RPM=120     GEMINI_CHUNK_SIZE=6
+# GEMINI_RATE_LIMIT_RPM=120   GEMINI_CHUNK_SIZE=6
 # SYNC_API_KEY=<random>       # if set, POST /api/sync requires Authorization: Bearer it
 ```
 
@@ -86,12 +86,12 @@ manual CMS edits appear on refresh with no rebuild.
 
 ## Operating notes
 - **Add/fix gigs**: edit in the CMS admin - the gig is automatically marked **`manual`**,
-  so the crawler won't overwrite or prune it (no flag to remember). To take a gig off the
+  so the crawler won't overwrite it (no flag to remember). To take a gig off the
   site, set its **`status`** to `hidden` or `cancelled`; the crawler won't bring it back.
 - **Add a venue/source**: edit `apps/gig-crawler/src/models/sources.ts` (verify the listing
   URL resolves), commit, redeploy the crawler.
-- **Non-destructive**: runs upsert in place and only prune gigs unseen for
-  `SYNC_PRUNE_GRACE_DAYS`; a failed scrape never empties the site.
+- **Non-destructive**: runs upsert in place and never deletes gigs on its own; a failed
+  scrape never empties the site. Removing a gig is a deliberate human action (hide/cancel).
 - **No Brave/Netlify**: discovery is the curated registry; the web app is SSR on Railway
   (the old `docs/RAILWAY_DEPLOY.md` / `docs/NETLIFY_DEPLOY.md` are superseded by this file).
 ```

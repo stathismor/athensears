@@ -155,17 +155,13 @@ A run is a single operation with one clear result summary. It proceeds in these 
    protected or removed are left exactly as the human left them (see The manual contract and
    Soft deletion). Every gig the run saw has its "last seen" timestamp refreshed.
 
-8. **Debounced prune.** Future automatic gigs that have not been seen by a crawl for several
-   consecutive days are soft-deleted, so cancelled or de-listed events age out. This is
-   skipped entirely if the run stored nothing, so a single failed scrape run can never
-   empty the site.
+8. **Record the run.** The run writes a history entry summarizing what happened: its
+   timing, how it was triggered, the counts below, and the gigs it created and updated.
+   This is the audit trail for "what did a given run do".
 
-9. **Record the run.** The run writes a history entry summarizing what happened: its
-   timing, how it was triggered, the counts below, and the gigs it created, updated and
-   pruned. This is the audit trail for "what did a given run do".
-
-The whole run is **non-destructive by default**: it never clears and rebuilds, and its one
-form of removal (prune) is a soft delete and is debounced.
+The whole run is **non-destructive**: it never clears and rebuilds, and it never deletes
+gigs on its own. A gig only leaves the site when a human cancels or hides it, or via the
+explicit delete endpoint (see The manual contract and Soft deletion).
 
 ### Identity and deduplication
 
@@ -197,9 +193,9 @@ original on every run.
 ### The manual contract
 
 Anything a human touches in the CMS becomes protected automatically. When a person edits or
-creates a gig in the admin, the CMS marks it as manual. The crawler never modifies and
-never prunes a manual gig. To correct or add a gig by hand and have every future run leave
-it alone, a human just edits it - there is no flag to remember.
+creates a gig in the admin, the CMS marks it as manual. The crawler never modifies a manual
+gig. To correct or add a gig by hand and have every future run leave it alone, a human just
+edits it - there is no flag to remember.
 
 The crawler always writes automatic gigs as non-manual, and it distinguishes its own writes
 from a human's by the credential it uses, so its own updates never trip the automatic
@@ -212,13 +208,12 @@ Removal is never a silent hard delete. Every gig carries a status.
 | Status | Meaning | Set by |
 |---|---|---|
 | active | Shown on the site | Default for new and current gigs |
-| pruned | Not seen by recent crawls; aged out | The prune step |
 | cancelled | The event was called off | A human |
 | hidden | Deliberately removed from the site | A human |
+| pruned | Legacy - the former auto-prune. No longer set; older rows may still carry it | - |
 
-The web app shows only active, future gigs. When the prune step removes a gig it sets
-the status to pruned and keeps the row, so there is always a record of what was removed and
-when. When a human sets a gig to hidden or cancelled, the crawler treats that as a
+The web app shows only active, future gigs. When a human sets a gig to hidden or cancelled,
+the crawler treats that as a
 tombstone: even while the source keeps listing the event, the crawler recognizes the gig by
 its stable key and will not bring it back. This is what makes "I removed it and it stayed
 removed" true.
@@ -258,7 +253,6 @@ Behavior toggles:
 |---|---|
 | SYNC_ENRICH_PRICES | Deterministic price backfill from detail pages (default on) |
 | SYNC_ESCALATE_OTHER | Send coarsely-tagged events to the model for reclassification (default on) |
-| SYNC_PRUNE_GRACE_DAYS | Days a gig must go unseen before it is pruned (default 3; 0 disables pruning) |
 | CRAWLER_CACHE_ENABLED | The extraction cache (default on) |
 | CRAWLER_CACHE_TTL_DAYS | How long a cache entry is trusted before re-extraction (default 7) |
 | LOG_LEVEL | Logging verbosity (default info) |
@@ -347,7 +341,7 @@ require the crawler's API token.
 | source | Which registry source surfaced this gig (empty for a gig created by hand) |
 | sourceKey | Stable per-event identity within that source; the anchor for run-to-run matching. Set once, never rewritten |
 | manual | The human-ownership lock; set automatically when a person edits or creates the gig |
-| status | active, pruned, cancelled, or hidden |
+| status | active, cancelled, or hidden (older rows may carry a legacy pruned) |
 | lastSeenAt | The last crawl run that saw this gig |
 | deletedAt | When the gig was soft-deleted, if it has been |
 
@@ -364,8 +358,8 @@ truthful record of real content changes rather than being bumped on every run.
 |---|---|
 | startedAt / finishedAt | Run timing |
 | trigger | How the run was started (a manual API request, or an external scheduler) |
-| counts | Sources crawled, gigs created, updated, pruned, skipped as manual, served from cache, sent to the model, and errors |
-| affected | The gigs created, updated and pruned by this run |
+| counts | Sources crawled, gigs created, updated, skipped as manual, served from cache, sent to the model, and errors |
+| affected | The gigs created and updated by this run |
 
 **Crawl Cache** - a single internal record holding the crawler's extraction cache as one
 JSON blob. Written by the crawler and not meant to be edited by hand.
@@ -389,7 +383,7 @@ lives in the data itself.
 | When was it first added | The created timestamp |
 | When did its content last change | The updated timestamp |
 | When was it last confirmed by a crawl | lastSeenAt |
-| Was it removed, and how | status (pruned, cancelled, hidden) and deletedAt |
+| Was it removed, and how | status (cancelled, hidden) and deletedAt |
 | What did a given run do | The Sync Run record for that run |
 
 ---
@@ -447,4 +441,4 @@ reach the site.
 | URL normalization: bare domains and category links are rejected; a listing link is upgraded to a specific event link or dropped | After extraction |
 | Title cleaning: venue suffixes and stray punctuation stripped | After extraction and in the parsers |
 | Venue canonicalization: alias map plus dash/accent/year normalization collapses name variants | Before storage |
-| Manual and tombstone protection: human-owned or human-removed gigs are never updated, pruned, or resurrected | At upsert and prune |
+| Manual and tombstone protection: human-owned or human-removed gigs are never updated or resurrected | At upsert |

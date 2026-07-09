@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import type { GigsPort, StoredGig, PrunedGig, SyncRunRecord } from "../../ports/GigsPort.js";
+import type { GigsPort, StoredGig, SyncRunRecord } from "../../ports/GigsPort.js";
 import type { Gig, GigStatus, GigWriteExtra } from "../../models/gig.js";
 import type { Venue } from "../../models/venue.js";
 import type { StrapiGigEntity } from "../../models/strapi.js";
@@ -331,54 +331,6 @@ export class StrapiAdapter implements GigsPort {
     } catch (error) {
       logger.warn({ error }, "Failed to record sync run (non-fatal)");
     }
-  }
-
-  async pruneStaleGigs(notSeenSince: Date): Promise<PrunedGig[]> {
-    const today = new Date().toISOString().slice(0, 10);
-    const nowIso = new Date().toISOString();
-    const pruned: PrunedGig[] = [];
-
-    // Re-query from page 1 each pass: soft-deleting flips status off "active", so those
-    // rows drop out of the filter and the loop terminates. Guard caps it regardless.
-    for (let guard = 0; guard < 100; guard++) {
-      const response = await this.client.get("/api/gigs", {
-        params: {
-          // "not manual" = manual is false OR null. A bare `$ne: true` misses NULL rows
-          // (SQL: NULL != true is unknown), so legacy null-manual gigs would never prune.
-          "filters[$or][0][manual][$eq]": false,
-          "filters[$or][1][manual][$null]": true,
-          // Only touch currently-shown gigs; never resurrect a tombstone or re-prune.
-          "filters[status][$eq]": "active",
-          "filters[date][$gte]": `${today}T00:00:00.000Z`,
-          // Not seen by recent crawls. lastSeenAt (not updatedAt) is the heartbeat.
-          "filters[lastSeenAt][$lt]": notSeenSince.toISOString(),
-          "pagination[pageSize]": 50,
-        },
-      });
-      const data = response.data;
-      const gigs = Array.isArray(data.data) ? data.data : [];
-      if (gigs.length === 0) {
-        break;
-      }
-      for (const gig of gigs) {
-        try {
-          await this.client.put(`/api/gigs/${gig.documentId}`, {
-            data: { status: "pruned", deletedAt: nowIso },
-          });
-          pruned.push({ documentId: gig.documentId, title: gig.title, date: gig.date });
-          logger.info({ title: gig.title, date: gig.date }, "Pruned stale gig (soft-deleted)");
-        } catch (error) {
-          logger.warn({ documentId: gig.documentId, error }, "Failed to prune gig");
-          return pruned; // stop on failure to avoid spinning
-        }
-      }
-    }
-
-    logger.info(
-      { pruned: pruned.length, notSeenSince: notSeenSince.toISOString() },
-      "Pruned stale gigs (soft)"
-    );
-    return pruned;
   }
 
   async listAllGigs(): Promise<StoredGig[]> {
