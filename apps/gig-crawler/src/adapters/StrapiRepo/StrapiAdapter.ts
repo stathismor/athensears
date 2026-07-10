@@ -419,7 +419,11 @@ export class StrapiAdapter implements GigsPort {
     const response = await this.client.get("/api/gigs", {
       params: {
         "pagination[pageSize]": 100,
-        "filters[manual][$ne]": true,
+        // "Not manual" means manual is false OR null - a bare `$ne: true` misses NULL rows
+        // (SQL: NULL != true is unknown), leaving legacy null-manual gigs undeletable.
+        // Mirrors the bulk deleteAll controller in the CMS.
+        "filters[$or][0][manual][$eq]": false,
+        "filters[$or][1][manual][$null]": true,
       },
     });
 
