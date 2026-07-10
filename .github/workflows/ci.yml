@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gig-crawler:
+    name: gig-crawler (build + test)
+    runs-on: ubuntu-latest
+    env:
+      # We never launch a real browser in unit tests, so skip Playwright's browser download.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check / build
+        run: pnpm --filter gig-crawler build
+
+      - name: Run tests
+        run: pnpm --filter gig-crawler test
