@@ -174,43 +174,22 @@ app.post("/api/gigs/delete", async (req, res) => {
   const dryRun = !(req.body?.dryRun === false || req.body?.dryRun === "false");
 
   try {
-    // Fetch all non-manual gigs (same filter as deleteAllGigsIndividual)
-    const strapiUrl = env.STRAPI_API_URL;
-    const response = await fetch(
-      `${strapiUrl}/api/gigs?pagination[pageSize]=100&filters[manual][$ne]=true`,
-      {
-        headers: { Authorization: `Bearer ${env.STRAPI_API_TOKEN}` },
-      }
-    );
-    const data = (await response.json()) as any;
-    const gigs = Array.isArray(data.data) ? data.data : [];
-
-    // Also fetch manual gigs to show what's protected
-    const manualResponse = await fetch(
-      `${strapiUrl}/api/gigs?pagination[pageSize]=100&filters[manual][$eq]=true`,
-      {
-        headers: { Authorization: `Bearer ${env.STRAPI_API_TOKEN}` },
-      }
-    );
-    const manualData = (await manualResponse.json()) as any;
-    const manualGigs = Array.isArray(manualData.data) ? manualData.data : [];
+    // Read through the port (no inline Strapi fetch), then partition: manual gigs are
+    // protected, everything else is what a real delete would remove.
+    const all = await gigsAdapter.listAllGigs();
+    const view = (g: (typeof all)[number]) => ({
+      documentId: g.documentId,
+      title: g.title,
+      date: g.date.toISOString(),
+      manual: g.manual,
+    });
+    const wouldDelete = all.filter((g) => !g.manual).map(view);
+    const protectedGigs = all.filter((g) => g.manual).map(view);
 
     const summary = {
-      wouldDelete: gigs.map((g: any) => ({
-        id: g.id,
-        documentId: g.documentId,
-        title: g.title,
-        date: g.date,
-        manual: g.manual,
-      })),
-      protected: manualGigs.map((g: any) => ({
-        id: g.id,
-        documentId: g.documentId,
-        title: g.title,
-        date: g.date,
-        manual: g.manual,
-      })),
-      counts: { toDelete: gigs.length, protected: manualGigs.length },
+      wouldDelete,
+      protected: protectedGigs,
+      counts: { toDelete: wouldDelete.length, protected: protectedGigs.length },
       dryRun,
     };
 
