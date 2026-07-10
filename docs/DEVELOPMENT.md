@@ -10,8 +10,9 @@ pnpm install
 pnpm dev
 
 # Or start individually
-pnpm dev:cms  # Strapi CMS on http://localhost:1337
-pnpm dev:web  # Astro frontend on http://localhost:4321
+pnpm dev:cms      # Strapi CMS on http://localhost:1337
+pnpm dev:web      # Astro frontend on http://localhost:4321
+pnpm dev:crawler  # gig-crawler service on http://localhost:3000
 ```
 
 ## Project Structure
@@ -19,23 +20,30 @@ pnpm dev:web  # Astro frontend on http://localhost:4321
 ```
 athensears/
 ├── apps/
-│   ├── cms/          # Strapi headless CMS (PostgreSQL)
-│   └── web/          # Astro frontend with Tailwind CSS
+│   ├── cms/          # Strapi headless CMS (PostgreSQL) - the source of truth
+│   ├── web/          # Astro frontend with Tailwind CSS (reads from the CMS)
+│   └── gig-crawler/  # Node/Express crawler - scrapes venues, upserts gigs into the CMS
+├── ARCHITECTURE.md   # Full system + sync-pipeline design
 ├── .prettierrc       # Code formatting config
 └── package.json      # Root workspace config
 ```
 
+The crawler has no built-in scheduler - a sync runs only when you `POST /api/sync`. See
+`apps/gig-crawler/README.md` for the API (and the `force`/`clear`/`repair`/`sources` modes).
+
 ## Available Commands
 
 ### Development
-- `pnpm dev` - Run both apps in parallel
+- `pnpm dev` - Run CMS + Web in parallel
 - `pnpm dev:cms` - Run only Strapi CMS
 - `pnpm dev:web` - Run only Astro frontend
+- `pnpm dev:crawler` - Run only the gig-crawler service
 
 ### Building
-- `pnpm build` - Build both apps
+- `pnpm build` - Build all apps
 - `pnpm build:cms` - Build Strapi admin panel
 - `pnpm build:web` - Build Astro site
+- `pnpm build:crawler` - Build the gig-crawler
 
 ### Code Quality
 - `pnpm format` - Format all code with Prettier

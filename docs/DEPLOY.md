@@ -71,6 +71,23 @@ if you set one). Watch logs; it should finish in a few minutes with `errors: 0`.
 endpoint takes options (`force`, `sources`, `clear`, `repair`, ...) - see
 `apps/gig-crawler/README.md` for the full API.
 
+### Nightly schedule (external)
+The crawler is **not** self-scheduling - the intended "once a night" cadence must come from
+outside the service. Set up a cron that `POST`s `/api/sync` daily, e.g. a Railway
+[cron service](https://docs.railway.com/reference/cron-jobs) (or a GitHub Actions schedule,
+or any host cron) running:
+
+```bash
+curl -fsS -XPOST https://<crawler-url>/api/sync \
+  -H "Authorization: Bearer $SYNC_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"trigger":"scheduler"}'
+```
+
+`trigger` is recorded in the sync-run journal so scheduled runs are distinguishable from
+manual ones. Runs are background jobs that return `409` if one is already in flight, so an
+overlapping trigger can't stack two syncs.
+
 ## 4. Web (SSR) - `apps/web/Dockerfile`
 Create a service. Environment:
 

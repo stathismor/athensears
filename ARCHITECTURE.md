@@ -8,18 +8,19 @@ post-rock, shoegaze, dark/goth, experimental/electronic, contemporary classical,
 folk and adjacent genres, and it strictly excludes mainstream pop, commercial EDM and
 club DJ nights, hip-hop, Greek popular music, tribute/cover acts, and comedy/theatre.
 
-On a regular cadence (about once a night) an automated crawler visits a hand-picked set of
-Athens venues and ticketing pages, extracts the gigs that fit the taste, and publishes them
-to a public website. The listing maintains itself, but a human can override, protect, or
-remove any individual entry, and those manual decisions survive every future run.
+On a regular cadence (about once a night, driven by an external scheduler - the service has
+no built-in cron) an automated crawler visits a hand-picked set of Athens venues and
+ticketing pages, extracts the gigs that fit the taste, and publishes them to a public
+website. The listing maintains itself, but a human can override, protect, or remove any
+individual entry, and those manual decisions survive every future run.
 
 ## What the system is built to do
 
 These are the goals the design serves. The rest of the document explains how each is met.
 
 - **Self-maintaining.** A run discovers, filters and stores gigs with no human in the loop,
-  and is meant to run on a regular schedule (about once a night). A person only steps in to
-  correct things.
+  and is meant to run on a regular schedule (about once a night, via an external scheduler
+  pointed at the sync endpoint). A person only steps in to correct things.
 - **Curated, not a firehose.** A strict keep/reject taste filter is the core product
   decision. Only known-good sources are ever visited.
 - **Human overrides survive re-syncs.** Anything a human edits, adds, or removes in the
