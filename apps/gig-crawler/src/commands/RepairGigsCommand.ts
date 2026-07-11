@@ -2,7 +2,7 @@ import type { GigsPort, StoredGig } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
 import { cleanEventTitle } from "../utils/cleanTitle.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
-import { normalizeTitle } from "../utils/normalize.js";
+import { titleTokens, titlesLikelySame } from "../utils/normalize.js";
 import { ACTIVE_CITY } from "../models/city.js";
 import { activeSources } from "../models/sources.js";
 import { logger } from "../utils/logger.js";
@@ -50,9 +50,10 @@ function completeness(g: StoredGig): number {
  * considered gig it re-runs `cleanEventTitle` + `normalizeVenueName` (the same functions
  * the sync applies at write time) and, where the result differs, updates the row -
  * preserving its documentId (so permalinks survive) and its status/provenance/lastSeenAt
- * (Strapi's partial update leaves untouched anything we don't send). When cleaning
- * collapses two rows onto the same title+day+venue, it keeps the better-linked/more-complete
- * one, backfills its missing fields from the duplicate, and deletes the duplicate.
+ * (Strapi's partial update leaves untouched anything we don't send). When two rows on the
+ * same day+venue name the same event (equal, subset-billing or small-typo titles - the
+ * sync's matcher), it keeps the better-linked/more-complete one under the fullest billing,
+ * backfills its missing fields from the duplicate, and deletes the duplicate.
  *
  * Idempotent and safe to re-run whenever the cleaning rules change. It always leaves
  * hand-edited (manual) gigs untouched, never re-scrapes, and never drops rows a source no
@@ -97,15 +98,13 @@ export class RepairGigsCommand {
     });
     report.scanned = considered.length;
 
-    // Derive the cleaned/canonical form for each gig and its post-clean identity key.
+    // Derive the cleaned/canonical form for each gig, grouped by day + canonical venue.
     type Desired = { gig: StoredGig; cleanTitle: string; canonicalVenue: string };
     const groups = new Map<string, Desired[]>();
     for (const gig of considered) {
       const canonicalVenue = normalizeVenueName(gig.venueName);
       const cleanTitle = cleanEventTitle(gig.title, canonicalVenue, city);
-      const key = `${normalizeTitle(cleanTitle)}|${gig.date
-        .toISOString()
-        .slice(0, 10)}|${canonicalVenue.toLowerCase()}`;
+      const key = `${gig.date.toISOString().slice(0, 10)}|${canonicalVenue.toLowerCase()}`;
       const entry = { gig, cleanTitle, canonicalVenue };
       const arr = groups.get(key);
       if (arr) {
@@ -115,22 +114,44 @@ export class RepairGigsCommand {
       }
     }
 
+    // Within each day+venue, cluster the rows that name the same event (equal, subset
+    // billing, or small-typo titles - the sync's matcher), fullest title first so each
+    // cluster's first member carries the fullest billing.
+    const clusters: Desired[][] = [];
     for (const group of groups.values()) {
+      const sorted = [...group].sort(
+        (a, b) => titleTokens(b.cleanTitle).size - titleTokens(a.cleanTitle).size
+      );
+      const groupClusters: Desired[][] = [];
+      for (const entry of sorted) {
+        const host = groupClusters.find((c) => titlesLikelySame(c[0].cleanTitle, entry.cleanTitle));
+        if (host) {
+          host.push(entry);
+        } else {
+          groupClusters.push([entry]);
+        }
+      }
+      clusters.push(...groupClusters);
+    }
+
+    for (const cluster of clusters) {
       try {
-        // Keep the best-linked, then most-complete row; the rest are duplicates to merge away.
-        group.sort(
+        // The display title is the fullest billing in the cluster (first member); the row
+        // to keep is the best-linked, then most-complete one.
+        const fullestTitle = cluster[0].cleanTitle;
+        cluster.sort(
           (a, b) =>
             urlScore(b.gig.url) - urlScore(a.gig.url) || completeness(b.gig) - completeness(a.gig)
         );
-        const keeper = group[0];
-        const losers = group.slice(1);
+        const keeper = cluster[0];
+        const losers = cluster.slice(1);
 
         // Backfill the keeper's missing fields from the duplicates, and adopt the best link.
-        const bestUrl = group
+        const bestUrl = cluster
           .map((d) => d.gig.url)
           .reduce((best, u) => (urlScore(u) > urlScore(best) ? u : best), keeper.gig.url);
         const merged: Gig = {
-          title: keeper.cleanTitle,
+          title: fullestTitle,
           date: keeper.gig.date,
           venueName: keeper.canonicalVenue,
           url: bestUrl,
@@ -181,7 +202,7 @@ export class RepairGigsCommand {
         }
       } catch (error) {
         report.errors++;
-        logger.error({ error, keeper: group[0]?.gig.documentId }, "Failed to repair gig group");
+        logger.error({ error, keeper: cluster[0]?.gig.documentId }, "Failed to repair gig group");
       }
     }
 
