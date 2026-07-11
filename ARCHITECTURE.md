@@ -172,8 +172,10 @@ what prevents duplicates and lets human edits survive.
 **Deduplication within a single run.** The same show can appear on a venue's own page and
 on an aggregator. These carry different links and share no id, so they are collapsed by
 comparing content: normalized title, calendar day, and canonical venue, in a few passes.
-An exact match is collapsed first; then a shorter billing is folded into a fuller one on
-the same night at the same venue (so "Megadeth" folds into "Megadeth / Sepultura"); then a
+An exact match is collapsed first; then titles that name the same event on the same night
+at the same venue are folded together - a shorter billing into a fuller one (so "Megadeth"
+folds into "Megadeth / Sepultura") and small-typo variants into each other (digits must
+match exactly and short titles get no tolerance, so numbered shows never merge); then a
 recurring series listed once per date under a single shared event page is folded into one
 upcoming entry. The surviving record keeps the most specific link, backfills any missing
 price, description, genres or image from the copies it absorbs, and carries the source and
@@ -183,9 +185,13 @@ per-event key of the copy it kept.
 night, the crawler matches in two tiers. First it looks for a stored gig with the same
 source and per-event key. This key is a stable anchor: it is set once and never rewritten,
 so it survives an edited title and small wording drift from the source. If there is no such
-gig, it falls back to matching on normalized title within the same day and venue. A match
-that a human has protected or removed is left untouched; an ordinary automatic match is
-updated in place; no match at all creates a new gig.
+gig, it falls back to matching within the same day and venue: an exact normalized title
+first, then the same same-event matcher the in-run dedup uses (subset billings, small
+typos), so a title that drifted between runs updates its row instead of creating a
+duplicate. On such a drifted match the stored display title is kept unless the new one is
+strictly fuller - otherwise sources rewording a billing would flip-flop the title night
+after night. A match that a human has protected or removed is left untouched; an ordinary
+automatic match is updated in place; no match at all creates a new gig.
 
 The stable per-event key is the single most important guard against duplicates. Without it,
 renaming a gig by hand would make the crawler fail to recognize it and re-create the
