@@ -64,7 +64,7 @@ const linkClass =
       }
     </div>
 
-    <div class="text-right text-sm font-bold text-accent-strong">
+    <div class="text-right text-sm font-bold text-accent">
       {
         gig.url ? (
           <a
@@ -72,7 +72,7 @@ const linkClass =
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Tickets for ${gig.title}`}
-            class={`${linkClass} decoration-accent/40 hover:text-accent hover:decoration-accent`}
+            class={`${linkClass} decoration-accent/40 hover:text-accent-strong hover:decoration-accent-strong`}
           >
             {gig.price || 'Info'}
           </a>
@@ -125,7 +125,7 @@ const linkClass =
         )
       }
 
-      <div class="mt-0.5 text-sm font-bold text-accent-strong">
+      <div class="mt-0.5 text-sm font-bold text-accent">
         {
           gig.url ? (
             <a
@@ -133,7 +133,7 @@ const linkClass =
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Tickets for ${gig.title}`}
-              class={`${linkClass} inline-block decoration-accent/40 hover:text-accent hover:decoration-accent`}
+              class={`${linkClass} inline-block decoration-accent/40 hover:text-accent-strong hover:decoration-accent-strong`}
             >
               {gig.price || 'Info'}
             </a>

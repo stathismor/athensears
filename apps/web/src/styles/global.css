@@ -15,8 +15,8 @@
   --color-line: #e6dcc9; /* hairlines / borders */
 
   /* Vermilion accent */
-  --color-accent: #ea3a1a; /* bright — large / display use only */
-  --color-accent-strong: #c5300f; /* darker — small text & links (AA on surface) */
+  --color-accent: #ea3a1a; /* bright - the one red: dates, month headers, prices */
+  --color-accent-strong: #c5300f; /* darker - hover states & emphasis (AA on surface) */
 }
 
 html {
