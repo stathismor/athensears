@@ -15,7 +15,7 @@ import {
   type SyncOptions,
   type SyncStats,
 } from "../src/commands/SyncGigsCommand.js";
-import { normalizeTitle } from "../src/utils/normalize.js";
+import { normalizeTitle, titlesLikelySame } from "../src/utils/normalize.js";
 import { normalizeVenueName } from "../src/models/venueAliases.js";
 
 /** A scraper that always succeeds with trivial content - the fake LLM ignores it anyway. */
@@ -120,20 +120,20 @@ export class InMemoryGigsPort implements GigsPort {
         }
       }
     }
-    // Tier 2: normalized title + calendar day + canonical venue.
+    // Tier 2: same calendar day + canonical venue, then exact normalized title first,
+    // falling back to the same-event matcher - mirrors the Strapi adapter.
     const day = gig.date.toISOString().slice(0, 10);
     const title = normalizeTitle(gig.title);
     const venue = normalizeVenueName(gig.venueName).toLowerCase();
-    for (const g of this.gigs.values()) {
-      if (
+    const sameVenue = [...this.gigs.values()].filter(
+      (g) =>
         g.date.toISOString().slice(0, 10) === day &&
-        normalizeTitle(g.title) === title &&
         normalizeVenueName(g.venueName).toLowerCase() === venue
-      ) {
-        return { ...g };
-      }
-    }
-    return null;
+    );
+    const match =
+      sameVenue.find((g) => normalizeTitle(g.title) === title) ??
+      sameVenue.find((g) => titlesLikelySame(g.title, gig.title));
+    return match ? { ...match } : null;
   }
   async createGig(gig: Gig, venueId: number): Promise<number> {
     const id = this.nextGigId++;

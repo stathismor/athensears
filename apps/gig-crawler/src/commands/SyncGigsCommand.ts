@@ -5,7 +5,12 @@ import type { Gig } from "../models/gig.js";
 import type { ScrapedContent } from "../models/scrapedContent.js";
 import { activeSources, type GigSource } from "../models/sources.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
-import { normalizeTitle } from "../utils/normalize.js";
+import {
+  normalizeTitle,
+  titleTokens,
+  isStrictSubset,
+  titlesLikelySame,
+} from "../utils/normalize.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
 import { parseMoreComListing, extractMoreComOtherUrls } from "../parsers/moreComListing.js";
@@ -125,24 +130,6 @@ function matchEventUrl(title: string, urls: string[]): string | undefined {
     }
   }
   return bestScore >= 1 ? best : undefined;
-}
-
-/** Significant tokens of a title (normalized words). */
-function titleTokens(title: string): Set<string> {
-  return new Set(normalizeTitle(title).split(" ").filter(Boolean));
-}
-
-/** True if `a` is a strict subset of `b` (every token of a is in b, and a is smaller). */
-function isStrictSubset(a: Set<string>, b: Set<string>): boolean {
-  if (a.size === 0 || a.size >= b.size) {
-    return false;
-  }
-  for (const t of a) {
-    if (!b.has(t)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 /**
@@ -325,14 +312,22 @@ export class SyncGigsCommand {
               const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
 
               if (existing) {
-                if (this.gigChanged(existing, gig)) {
-                  await this.gigs.updateGig(existing.documentId, gig, venueId, {
+                // The matcher tolerates title drift (subset billings, small typos), so
+                // keep the stored display title unless this run's is strictly fuller -
+                // adopting every source's rewording would flip-flop titles run over run.
+                const toWrite =
+                  gig.title !== existing.title &&
+                  !isStrictSubset(titleTokens(existing.title), titleTokens(gig.title))
+                    ? { ...gig, title: existing.title }
+                    : gig;
+                if (this.gigChanged(existing, toWrite)) {
+                  await this.gigs.updateGig(existing.documentId, toWrite, venueId, {
                     manual: false,
                     status: "active",
                     lastSeenAt: nowIso,
                   });
                   stats.gigsUpdated++;
-                  affected.updated.push(this.gigLabel(gig));
+                  affected.updated.push(this.gigLabel(toWrite));
                 } else {
                   seenDocIds.push(existing.documentId);
                 }
@@ -486,8 +481,9 @@ export class SyncGigsCommand {
       byKey.set(key, existing ? merge(existing, gig, false) : gig);
     }
 
-    // Pass 2: within the same day+venue, collapse a billing that is a token-subset of a
-    // fuller one (e.g. "Megadeth" into "Megadeth / Sepultura") - keep the fuller title.
+    // Pass 2: within the same day+venue, collapse titles that name the same event - a
+    // billing that is a token-subset of a fuller one ("Megadeth" into "Megadeth /
+    // Sepultura") or a small-typo variant ("MONSIER MINIMAL") - keeping the fuller title.
     const groups = new Map<string, Gig[]>();
     for (const gig of byKey.values()) {
       const k = dayVenueKey(gig);
@@ -503,8 +499,7 @@ export class SyncGigsCommand {
       group.sort((a, b) => titleTokens(b.title).size - titleTokens(a.title).size); // fuller first
       const kept: Gig[] = [];
       for (const gig of group) {
-        const tokens = titleTokens(gig.title);
-        const hostIdx = kept.findIndex((k) => isStrictSubset(tokens, titleTokens(k.title)));
+        const hostIdx = kept.findIndex((k) => titlesLikelySame(k.title, gig.title));
         if (hostIdx >= 0) {
           kept[hostIdx] = merge(kept[hostIdx], gig, true); // keep fuller (host) title
         } else {

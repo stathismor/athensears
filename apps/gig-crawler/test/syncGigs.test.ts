@@ -105,6 +105,46 @@ describe("SyncGigsCommand", () => {
     expect(port.count()).toBe(1);
   });
 
+  it("adopts a fuller billing onto the existing row instead of duplicating (cross-run)", async () => {
+    const port = new InMemoryGigsPort();
+    await runSync(port, [makeGig({ title: "Krista Papista", url: "" })]);
+    const stats = await runSync(port, [makeGig({ title: "Krista Papista Heartmode", url: "" })]);
+    expect(stats.gigsCreated).toBe(0);
+    expect(stats.gigsUpdated).toBe(1);
+    expect(port.count()).toBe(1);
+    expect(port.first().title).toBe("Krista Papista Heartmode");
+  });
+
+  it("keeps the stored title when a source drops back to a partial billing", async () => {
+    const port = new InMemoryGigsPort();
+    await runSync(port, [makeGig({ title: "Krista Papista Heartmode", url: "" })]);
+    const stats = await runSync(port, [makeGig({ title: "Krista Papista", url: "" })]);
+    expect(stats.gigsCreated).toBe(0);
+    expect(stats.gigsUpdated).toBe(0); // nothing else changed -> heartbeat, no churn
+    expect(stats.gigsSeen).toBe(1);
+    expect(port.count()).toBe(1);
+    expect(port.first().title).toBe("Krista Papista Heartmode");
+  });
+
+  it("matches a small-typo title to the stored row instead of duplicating (cross-run)", async () => {
+    const port = new InMemoryGigsPort();
+    await runSync(port, [makeGig({ title: "Monsieur Minimal", url: "" })]);
+    const stats = await runSync(port, [makeGig({ title: "MONSIER MINIMAL", url: "" })]);
+    expect(stats.gigsCreated).toBe(0);
+    expect(port.count()).toBe(1);
+    expect(port.first().title).toBe("Monsieur Minimal"); // stored spelling kept
+  });
+
+  it("collapses typo variants of the same event within one run", async () => {
+    const port = new InMemoryGigsPort();
+    const stats = await runSync(port, [
+      makeGig({ title: "Monsieur Minimal" }),
+      makeGig({ title: "MONSIER MINIMAL", url: "" }),
+    ]);
+    expect(stats.gigsExtracted).toBe(1);
+    expect(port.count()).toBe(1);
+  });
+
   it("matches a gig with no stable link by title + day + venue (no duplicate)", async () => {
     const port = new InMemoryGigsPort();
     await runSync(port, [makeGig({ title: "No Link Band", url: "" })]);

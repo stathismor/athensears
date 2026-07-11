@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeTitle } from "../src/utils/normalize.js";
+import { normalizeTitle, titlesLikelySame } from "../src/utils/normalize.js";
 import { normalizeVenueName } from "../src/models/venueAliases.js";
 import { cleanEventTitle } from "../src/utils/cleanTitle.js";
 import { normalizePrice } from "../src/utils/normalizePrice.js";
@@ -17,6 +17,31 @@ describe("normalizeTitle", () => {
   it("folds Greek capitals that look like Latin ones", () => {
     expect(normalizeTitle("ΝΤOUVAS")).toBe(normalizeTitle("NTOUVAS"));
   });
+
+  it("folds ALL-CAPS and mixed-case Greek to the same form", () => {
+    expect(normalizeTitle("ΘΟΔΩΡΗΣ ΜΑΡΑΝΤΙΝΗΣ")).toBe(normalizeTitle("Θοδωρης Μαραντινης"));
+  });
+});
+
+describe("titlesLikelySame", () => {
+  it("matches a partial billing (token subset)", () => {
+    expect(titlesLikelySame("Krista Papista", "Krista Papista Heartmode")).toBe(true);
+    expect(titlesLikelySame("EJEKT FESTIVAL 2026", "EJEKT FESTIVAL")).toBe(true);
+    expect(titlesLikelySame("The Cure", "Florence + The Machine, The Cure")).toBe(true);
+  });
+
+  it("tolerates a small typo in long titles", () => {
+    expect(titlesLikelySame("MONSIER MINIMAL", "Monsieur Minimal")).toBe(true);
+    expect(titlesLikelySame("Ευρυδικη - Θοδωρης Μαραντινης", "ΕΥΡΙΔΙΚΗ - ΘΟΔΩΡΗΣ ΜΑΡΑΝΤΙΝΗΣ")).toBe(
+      true
+    );
+  });
+
+  it("never fuzzy-matches differing digits or short titles", () => {
+    expect(titlesLikelySame("Temple Live 11/7", "Temple Live 12/7")).toBe(false);
+    expect(titlesLikelySame("AC/DC", "AB/DC")).toBe(false);
+    expect(titlesLikelySame("Band A", "Band B")).toBe(false);
+  });
 });
 
 describe("normalizeVenueName", () => {
@@ -31,6 +56,23 @@ describe("normalizeVenueName", () => {
 
   it("returns an unknown venue unchanged", () => {
     expect(normalizeVenueName("Some New Venue")).toBe("Some New Venue");
+  });
+
+  it("matches aliases through punctuation variants", () => {
+    expect(normalizeVenueName("Gazarte - Roof Stage")).toBe("Gazarte");
+  });
+
+  it("collapses sub-space and prefix variants of institutional venues", () => {
+    expect(normalizeVenueName("Πειραιως 260 - Πλατεια")).toBe("Πειραιώς 260");
+    expect(normalizeVenueName("Πειραιως 260")).toBe("Πειραιώς 260");
+    expect(normalizeVenueName("Δημοτικο Κηποθεατρο Παπαγου")).toBe("Κηποθέατρο Παπάγου");
+    expect(normalizeVenueName("Κηποθεατρο Παπαγου")).toBe("Κηποθέατρο Παπάγου");
+  });
+
+  it("maps PLYFA across scripts and annex labels", () => {
+    expect(normalizeVenueName("ΠΛΥΦΑ")).toBe("PLYFA");
+    expect(normalizeVenueName("PLYFA Building 7C")).toBe("PLYFA");
+    expect(normalizeVenueName("plyfa")).toBe("PLYFA");
   });
 });
 

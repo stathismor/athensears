@@ -1,4 +1,5 @@
 import { normalizeDashes } from "../utils/cleanTitle.js";
+import { normalizeTitle } from "../utils/normalize.js";
 
 /**
  * Maps known venue name variations to a canonical name.
@@ -9,6 +10,7 @@ const VENUE_ALIASES: Record<string, string> = {
   gagarin205: "Gagarin 205",
   "gagarin 205": "Gagarin 205",
   "gagarin live music space": "Gagarin 205",
+  "gagarin 205 live music space": "Gagarin 205",
   gagarin: "Gagarin 205",
 
   // An Club
@@ -25,6 +27,9 @@ const VENUE_ALIASES: Record<string, string> = {
   fuzz: "Fuzz Club",
   "fuzz club": "Fuzz Club",
   "fuzz live music club": "Fuzz Club",
+
+  // Floyd (aggregators write it ALL-CAPS)
+  floyd: "Floyd",
 
   // Death Disco
   "death disco": "Death Disco",
@@ -58,10 +63,35 @@ const VENUE_ALIASES: Record<string, string> = {
   bios: "Bios",
   "β|ος": "Bios",
 
-  // Gazarte
+  // Gazarte (foldKey drops punctuation, so "Gazarte - Roof Stage" also lands here)
   gazarte: "Gazarte",
   "gazarte main stage": "Gazarte",
   "gazarte roof stage": "Gazarte",
+
+  // PLYFA (former gasworks laundry, Votanikos) - sources write it in either script,
+  // sometimes with the building annex.
+  plyfa: "PLYFA",
+  πλυφα: "PLYFA",
+  "plyfa building 7c": "PLYFA",
+
+  // Peiraios 260 (Athens Epidaurus Festival industrial venue) - sources append the
+  // sub-space ("Πλατεία", "Χώρος Δ/Ε/Η"); collapse onto the venue.
+  "πειραιώς 260": "Πειραιώς 260",
+  "πειραιώς 260 πλατεία": "Πειραιώς 260",
+  "πειραιώς 260 χώρος δ": "Πειραιώς 260",
+  "πειραιώς 260 χώρος ε": "Πειραιώς 260",
+  "πειραιώς 260 χώρος η": "Πειραιώς 260",
+  "peiraios 260": "Πειραιώς 260",
+  "piraeus 260": "Πειραιώς 260",
+
+  // Stoa Culture - sources write the atrium variant ("Αίθριο Στοά Culture") and
+  // mixed-script forms (a Latin "A" in "Aίθριο" folds to the Greek one).
+  "στοά culture": "Στοά Culture",
+  "αίθριο στοά culture": "Στοά Culture",
+
+  // Papagou Garden Theatre - the municipal prefix comes and goes.
+  "κηποθέατρο παπάγου": "Κηποθέατρο Παπάγου",
+  "δημοτικό κηποθέατρο παπάγου": "Κηποθέατρο Παπάγου",
 
   // Release Athens festival (at Plateia Nerou, Palaio Faliro) - aggregators label it
   // variously by the square or the neighborhood; collapse them onto the festival.
@@ -80,14 +110,13 @@ const VENUE_ALIASES: Record<string, string> = {
   "εθνικο αστεροσκοπειο αθηνων - κεντρο επισκεπτων θησειου": "Εθνικό Αστεροσκοπείο Αθηνών",
 };
 
-/** Lowercase + strip diacritics, so the alias lookup is accent-insensitive. */
+/**
+ * Venue-name matching key: the same case/script/accent/punctuation folding titles get
+ * (so "Gazarte - Roof Stage" hits the "gazarte roof stage" alias and Greek/Latin
+ * homoglyph spellings match), plus dropping a trailing year ("Release Athens 2026").
+ */
 function foldKey(s: string): string {
-  return s
-    .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .toLowerCase()
-    .replace(/\s+(?:19|20)\d{2}$/, "") // drop a trailing year ("Release Athens 2026")
-    .trim();
+  return normalizeTitle(s).replace(/\s(?:19|20)\d{2}$/, "");
 }
 
 /** Alias map re-keyed on the accent-folded form, built once. */
