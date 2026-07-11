@@ -63,7 +63,7 @@ export function isStrictSubset(a: Set<string>, b: Set<string>): boolean {
 }
 
 /** Levenshtein distance, abandoning early once every path already exceeds `max`. */
-function editDistanceAtMost(a: string, b: string, max: number): number {
+export function editDistanceAtMost(a: string, b: string, max: number): number {
   let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     const curr = [i];

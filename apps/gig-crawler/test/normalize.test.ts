@@ -92,6 +92,26 @@ describe("cleanEventTitle", () => {
   it("keeps co-headline bills intact", () => {
     expect(cleanEventTitle("Megadeth / Sepultura")).toBe("Megadeth / Sepultura");
   });
+
+  it("strips a trailing written-out date, tolerating Greek inflection and typos", () => {
+    expect(cleanEventTitle("Groove Therapist & Daenoma Σαββατο 19 Σεπτεμβριιου")).toBe(
+      "Groove Therapist & Daenoma"
+    );
+    expect(cleanEventTitle("Artist Live Saturday 19 September 2026")).toBe("Artist Live");
+    expect(cleanEventTitle("Μπαντα ΣΑΒΒΑΤΟ 19 ΣΕΠΤΕΜΒΡΙΟΥ")).toBe("Μπαντα");
+    expect(cleanEventTitle("Μπαντα Πέμμπτη 24 Σεπτεμβρίου")).toBe("Μπαντα"); // typo'd weekday
+    expect(cleanEventTitle("Band 19th of September")).toBe("Band");
+  });
+
+  it("keeps acts whose names merely contain numbers or month words", () => {
+    expect(cleanEventTitle("Sum 41")).toBe("Sum 41");
+    expect(cleanEventTitle("May Roosevelt")).toBe("May Roosevelt");
+  });
+
+  it("strips dangling separators so trailing subtitles still clean up", () => {
+    expect(cleanEventTitle('Kawir: 30 Years "To Cavirs":')).toBe("Kawir: 30 Years");
+    expect(cleanEventTitle("Some Band -")).toBe("Some Band");
+  });
 });
 
 describe("normalizePrice", () => {

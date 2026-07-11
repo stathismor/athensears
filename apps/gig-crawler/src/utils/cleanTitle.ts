@@ -1,3 +1,5 @@
+import { editDistanceAtMost } from "./normalize.js";
+
 /**
  * Country codes/names that sources append to disambiguate touring acts, e.g. "CRO-MAGS
  * (US)", "Elder (USA)". Stripped from the trailing parenthesis for a cleaner title.
@@ -138,6 +140,124 @@ export function normalizeDashes(s: string): string {
   return s.replace(/[‒–—―−]/g, "-");
 }
 
+/**
+ * Weekday words and month stems for trailing-date detection, in the languages the sources
+ * use. Written accent-free: tokens are `foldText`ed before matching, and matched with one
+ * edit of tolerance, so accent variants and single-letter typos ("πέμμπτη",
+ * "Σεπτεμβριιου") are caught without being enumerated. Months are stems compared against
+ * the token's prefix, so Greek inflection ("Σεπτεμβρίου/Σεπτέμβρη") is covered.
+ */
+const WEEKDAY_WORDS = [
+  "δευτερα",
+  "τριτη",
+  "τεταρτη",
+  "πεμπτη",
+  "παρασκευη",
+  "σαββατο",
+  "κυριακη",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+const MONTH_STEMS = [
+  "ιανουαρ",
+  "φεβρουαρ",
+  "μαρτ",
+  "απριλ",
+  "μαι",
+  "ιουν",
+  "ιουλ",
+  "αυγουστ",
+  "σεπτεμβρ",
+  "οκτωβρ",
+  "νοεμβρ",
+  "δεκεμβρ",
+  "januar",
+  "februar",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "septemb",
+  "octob",
+  "novemb",
+  "decemb",
+];
+
+/** One edit of tolerance for words long enough to absorb it; short words must be exact. */
+function fuzzyTolerance(word: string): number {
+  return word.length >= 5 ? 1 : 0;
+}
+
+function isWeekdayToken(folded: string): boolean {
+  return WEEKDAY_WORDS.some(
+    (w) => editDistanceAtMost(folded, w, fuzzyTolerance(w)) <= fuzzyTolerance(w)
+  );
+}
+
+/** Whether a folded token starts with (a near-miss of) a month stem. */
+function isMonthToken(folded: string): boolean {
+  return MONTH_STEMS.some((stem) => {
+    if (folded.length < stem.length) {
+      return false;
+    }
+    const tol = fuzzyTolerance(stem);
+    return editDistanceAtMost(folded.slice(0, stem.length + tol), stem, tol) <= tol;
+  });
+}
+
+/**
+ * Strip a written-out date from the end of a title ("Σαββατο 19 Σεπτεμβριου", "Saturday
+ * 19 September 2026", "19th of September"): optional weekday, day number, month, optional
+ * year. Anchored on the "<day> <month>" pair so acts with numbers or month-like names
+ * ("Sum 41", "May Roosevelt") survive. Works on tokens of the ORIGINAL string (folded
+ * copies are used only for testing), so the cut never misaligns.
+ */
+function stripTrailingWrittenDate(t: string): string {
+  const tokens = [...t.matchAll(/\S+/gu)].map((m) => ({
+    folded: foldText(m[0]).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""),
+    index: m.index,
+  }));
+  let i = tokens.length - 1;
+  if (i >= 0 && /^(?:19|20)\d{2}$/.test(tokens[i].folded)) {
+    i--; // optional year
+  }
+  if (i < 0 || !isMonthToken(tokens[i].folded)) {
+    return t;
+  }
+  i--;
+  if (i >= 0 && tokens[i].folded === "of") {
+    i--; // "19th of September"
+  }
+  const day = i >= 0 ? tokens[i].folded.match(/^(\d{1,2})(?:η|ης|st|nd|rd|th)?$/u) : null;
+  if (!day || Number(day[1]) < 1 || Number(day[1]) > 31) {
+    return t;
+  }
+  i--;
+  if (i >= 0 && isWeekdayToken(tokens[i].folded)) {
+    i--;
+  }
+  if (i < 0) {
+    return t; // the whole title is a date - leave it for a human
+  }
+  return t.slice(0, tokens[i + 1].index).trim();
+}
+
+/**
+ * Strip separator punctuation left dangling at the end of a title (e.g. the colon in
+ * 'Kawir: 30 Years "To Cavirs":'). Terminal marks that can be part of a name (!, ?, .,
+ * closing brackets) are deliberately left alone.
+ */
+function stripDanglingSeparators(s: string): string {
+  return s.replace(/[\s:;,|/&+-]+$/u, "").trim();
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -212,6 +332,10 @@ export function cleanEventTitle(
   //     leading comma/dash. Bare numbers ("Sum 41", "blink-182") have no separator, so survive.
   t = t.replace(/[\s,]*[-–—]?\s*\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\s*$/u, "").trim();
 
+  // 2d) Trailing written-out date ("Σαββατο 19 Σεπτεμβριου", "Saturday 19 September 2026") -
+  //     fold-and-fuzzy token matching, see stripTrailingWrittenDate.
+  t = stripTrailingWrittenDate(t);
+
   // 3) Trailing "(live) in/at <city>" tail (e.g. "Elder (USA) live in Athens").
   if (cityAliases.length > 0) {
     const alt = cityAliases.map(escapeRegExp).join("|");
@@ -230,7 +354,9 @@ export function cleanEventTitle(
     )
     .trim();
 
-  // 5) Trailing subtitle noise.
+  // 5) Trailing subtitle noise. Dangling separators are stripped first so a quoted
+  //    subtitle followed by a stray colon ('… "To Cavirs":') still counts as trailing.
+  t = stripDanglingSeparators(t);
   t = t
     .replace(/\s*[|–-]\s*\d+\s+years?\s+anniversary.*$/iu, "")
     .replace(/\s+"[^"]{2,}"\s*$/u, "")
@@ -240,8 +366,9 @@ export function cleanEventTitle(
     .replace(/\s*\|\s.*$/u, "")
     .trim();
 
-  // 6) Normalize fancy dashes (en/em/figure/minus) to a plain hyphen.
-  t = normalizeDashes(t);
+  // 6) Normalize fancy dashes (en/em/figure/minus) to a plain hyphen, and drop any
+  //    separator the strips above left dangling.
+  t = stripDanglingSeparators(normalizeDashes(t));
 
   return t || raw.trim();
 }
