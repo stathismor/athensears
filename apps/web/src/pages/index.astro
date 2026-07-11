@@ -76,7 +76,10 @@ try {
               <div>
                 {groupByMonth(gigs).map((month, mi) => (
                   <section class:list={[mi > 0 && 'mt-8']}>
-                    <div class="sticky top-0 z-10 -mx-3 mb-1 border-b border-line bg-surface px-3 py-2 sm:-mx-4 sm:px-4">
+                    {/* z-20: must clear the rows' interior z-10 layers (the venue links
+                        raised above each row's stretched ticket link), or those paint
+                        over the sticky header as rows scroll beneath it. */}
+                    <div class="sticky top-0 z-20 -mx-3 mb-1 border-b border-line bg-surface px-3 py-2 sm:-mx-4 sm:px-4">
                       <span class="text-xl font-extrabold uppercase tracking-[0.2em] text-accent">
                         {month.label}
                       </span>
