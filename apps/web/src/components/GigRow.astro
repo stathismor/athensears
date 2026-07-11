@@ -16,8 +16,9 @@ const { weekday, day, month } = formatDate(gig.date);
 const artist = stripGreekAccents(gig.title);
 const venueName = gig.venue ? stripGreekAccents(gig.venue.name) : '';
 
-const linkClass =
-  'underline underline-offset-4 transition-colors focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const focusClass =
+  'transition-colors focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const linkClass = `underline underline-offset-4 ${focusClass}`;
 ---
 
 <div
@@ -144,7 +145,7 @@ const linkClass =
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Tickets for ${gig.title}`}
-              class={`${linkClass} inline-block decoration-accent/40 hover:text-accent-strong hover:decoration-accent-strong after:absolute after:inset-0 after:content-['']`}
+              class={`${focusClass} inline-block after:absolute after:inset-0 after:content-['']`}
             >
               {gig.price || 'Info'}
             </a>
