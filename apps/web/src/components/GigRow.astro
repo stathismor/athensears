@@ -22,7 +22,9 @@ const linkClass =
 
 <div
   class:list={[
-    '-mx-3 px-3 transition-colors hover:bg-paper/60 sm:-mx-4 sm:px-4',
+    // relative anchors the mobile stretched link (the price anchor's ::after overlay),
+    // so the whole row is one big tap target for the ticket link.
+    'relative -mx-3 px-3 transition-colors hover:bg-paper/60 active:bg-paper/60 sm:-mx-4 sm:px-4',
     divider && 'border-t border-line',
   ]}
 >
@@ -109,21 +111,21 @@ const linkClass =
     <div class="min-w-0 flex-1">
       <h3
         title={artist.toUpperCase()}
-        class="truncate text-xs font-bold uppercase tracking-tight text-ink"
+        class="truncate text-sm font-bold uppercase tracking-tight text-ink"
       >
         {artist}
       </h3>
 
       {
         gig.venue && (
-          <p class="mt-0.5 truncate text-xs uppercase tracking-wide text-muted">
+          <p class="mt-0.5 truncate text-sm uppercase tracking-wide text-muted">
             {gig.venue.website ? (
               <a
                 href={gig.venue.website}
                 target="_blank"
                 rel="noopener noreferrer"
                 title={venueName.toUpperCase()}
-                class={`${linkClass} decoration-line hover:text-ink hover:decoration-ink`}
+                class={`${linkClass} relative z-10 decoration-line hover:text-ink hover:decoration-ink`}
               >
                 {venueName}
               </a>
@@ -134,7 +136,7 @@ const linkClass =
         )
       }
 
-      <div class="mt-0.5 text-xs font-bold text-accent">
+      <div class="mt-0.5 text-sm font-bold text-accent">
         {
           gig.url ? (
             <a
@@ -142,7 +144,7 @@ const linkClass =
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Tickets for ${gig.title}`}
-              class={`${linkClass} inline-block decoration-accent/40 hover:text-accent-strong hover:decoration-accent-strong`}
+              class={`${linkClass} inline-block decoration-accent/40 hover:text-accent-strong hover:decoration-accent-strong after:absolute after:inset-0 after:content-['']`}
             >
               {gig.price || 'Info'}
             </a>
