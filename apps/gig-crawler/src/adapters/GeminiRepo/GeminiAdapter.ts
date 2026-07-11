@@ -240,14 +240,21 @@ export class GeminiAdapter implements LLMPort {
     // stored gigs, no LLM call) and misses (need extraction). The hash is over the
     // exact content string that would be sent to the model, so a hit guarantees an
     // identical prompt. Cached gigs are re-filtered against the (daily-shifting) date
-    // window since the cache is date-agnostic.
+    // window since the cache is date-agnostic, and their titles re-cleaned so the
+    // CURRENT cleaning rules apply - a replay of gigs cleaned under older rules must
+    // not resurrect title junk a repair has already scrubbed from the CMS.
     const cacheHitGigs: Gig[] = [];
     const missPages: ScrapedContent[] = [];
     for (const sc of successfulPages) {
       const { content } = preparePageContent(sc);
       const cached = this.cache.get(sc.url, PageExtractionCache.hash(content));
       if (cached) {
-        const inWindow = cached.filter((g) => isWithinRange(g.date, dateRange));
+        const inWindow = cached
+          .filter((g) => isWithinRange(g.date, dateRange))
+          .map((g) => ({
+            ...g,
+            title: cleanEventTitle(g.title, g.venueName, ACTIVE_CITY.nameAliases),
+          }));
         cacheHitGigs.push(...inWindow);
         logger.debug(
           { url: sc.url, cache: "HIT", gigs: inWindow.length },
