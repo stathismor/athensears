@@ -110,8 +110,12 @@ export const GIG_SOURCES: GigSource[] = [
     type: "venue",
     venueName: "Death Disco",
     neighborhood: "Psyrri",
-    // Official site has no schedule (FB/IG only); allevents is machine-readable.
+    // DISABLED: allevents.in/athens/<name> is a KEYWORD SEARCH, not a venue calendar -
+    // it surfaces unrelated Athens events which then get stamped with this venueName,
+    // creating phantom gigs (e.g. The Cure "at Death Disco"). Official site has no
+    // schedule (FB/IG only); re-enable only with a genuinely venue-scoped listing URL.
     listingUrls: ["https://allevents.in/athens/death%20disco"],
+    enabled: false,
   },
   {
     id: "temple",
@@ -119,8 +123,11 @@ export const GIG_SOURCES: GigSource[] = [
     type: "venue",
     venueName: "Temple",
     neighborhood: "Keramikos",
-    // thetemple.gr DNS is dead; schedule lives on FB. allevents lists upcoming shows.
+    // DISABLED: same allevents keyword-search problem as death-disco (worse - "temple"
+    // is a broad keyword). thetemple.gr DNS is dead; schedule lives on FB. Re-enable
+    // only with a genuinely venue-scoped listing URL.
     listingUrls: ["https://allevents.in/athens/temple"],
+    enabled: false,
   },
   {
     id: "ilion-plus",
