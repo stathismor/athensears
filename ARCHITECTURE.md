@@ -142,7 +142,7 @@ A run is a single operation with one clear result summary. It proceeds in these 
      Greek/Latin look-alike letters, so spelling variants of the same venue collapse. Titles
      are reduced to the bare act name: the model is instructed to strip venue tags, dates,
      and subtitles, and a deterministic cleaner backstops it (tolerating single-letter typos
-     in written-out dates). Each gig is also stamped with the id of the source that produced
+     in written-out dates, and stripping "live in <city/country>" marketing tails). Each gig is also stamped with the id of the source that produced
      it and a stable per-event key (see Identity below).
    - **Cache use.** Before extracting a page, the crawler checks whether the same page
      content was seen recently; if so it replays the previously extracted gigs instead of
@@ -184,26 +184,35 @@ what prevents duplicates and lets human edits survive.
 
 **Deduplication within a single run.** The same show can appear on a venue's own page and
 on an aggregator. These carry different links and share no id, so they are collapsed by
-comparing content: normalized title, calendar day, and canonical venue, in a few passes.
-An exact match is collapsed first; then titles that name the same event on the same night
-at the same venue are folded together - a shorter billing into a fuller one (so "Megadeth"
-folds into "Megadeth / Sepultura") and small-typo variants into each other (digits must
-match exactly and short titles get no tolerance, so numbered shows never merge); then a
-recurring series listed once per date under a single shared event page is folded into one
-upcoming entry. The surviving record keeps the most specific link, backfills any missing
-price, description, genres or image from the copies it absorbs, and carries the source and
-per-event key of the copy it kept.
+comparing content: normalized title and calendar day, in a few passes. The venue is
+deliberately NOT part of identity - the same act doesn't play two venues on one night, but
+the same event often carries different venue text across sources (a drifted spelling, or an
+aggregator placeholder like more.com's "Multiple venues" for a multi-city tour), which
+would otherwise split it in two. An exact match is collapsed first; then titles that name
+the same event on the same night are folded together - a shorter billing into a fuller one
+(so "Megadeth" folds into "Megadeth / Sepultura") and small-typo variants into each other
+(digits must match exactly and short titles get no tolerance, so numbered shows never
+merge); then a recurring series listed once per date under a single shared event page is
+folded into one upcoming entry. The surviving record keeps the most specific link and the
+best-sourced venue (a venue source's registry-stamped venue beats an aggregator's extracted
+text), backfills any missing price, description, genres or image from the copies it
+absorbs, and carries the source and per-event key of the copy it kept. The accepted
+trade-off: the same act genuinely playing twice in one day (a matinee plus an evening show)
+collapses to one entry - rare, and a human can always add the second show by hand.
 
 **Identity across runs.** To decide whether a gig already exists in the CMS from a previous
 night, the crawler matches in two tiers. First it looks for a stored gig with the same
 source and per-event key. This key is a stable anchor: it is set once and never rewritten,
 so it survives an edited title and small wording drift from the source. If there is no such
-gig, it falls back to matching within the same day and venue: an exact normalized title
-first, then the same same-event matcher the in-run dedup uses (subset billings, small
-typos), so a title that drifted between runs updates its row instead of creating a
-duplicate. On such a drifted match the stored display title is kept unless the new one is
-strictly fuller - otherwise sources rewording a billing would flip-flop the title night
-after night. A match that a human has protected or removed is left untouched; an ordinary
+gig, it falls back to matching within the same day (the venue is ignored, same as the
+in-run dedup): an exact normalized title first, then the same same-event matcher the
+in-run dedup uses (subset billings, small typos), so a title that drifted between runs
+updates its row instead of creating a duplicate. On such a drifted match the stored
+display title is kept unless the new one is strictly fuller - otherwise sources rewording
+a billing would flip-flop the title night after night - and the stored venue is kept
+unless the update comes from the same source or from a venue source, so an aggregator's
+placeholder venue never overwrites a real one. A match that a human has protected or
+removed is left untouched; an ordinary
 automatic match is updated in place; no match at all creates a new gig.
 
 The stable per-event key is the single most important guard against duplicates. Without it,
@@ -313,7 +322,7 @@ Repair options:
 
 | Option | Effect |
 |---|---|
-| repair | Re-apply the current title/venue cleaning rules to gigs already stored, in place (no scrape, no model calls), and merge rows that now resolve to the same event (same day and venue, equal/subset/near-identical titles), keeping the better-linked row and deleting the duplicate. Run it after the cleaning rules change. Idempotent, and it leaves manual gigs untouched |
+| repair | Re-apply the current title/venue cleaning rules to gigs already stored, in place (no scrape, no model calls), and merge rows that now resolve to the same event (same day, equal/subset/near-identical titles - the venue is not part of identity), keeping the better-linked row under the best-sourced venue and deleting the duplicate. Run it after the cleaning or matching rules change. Idempotent, and it leaves manual gigs untouched |
 
 Delete options:
 

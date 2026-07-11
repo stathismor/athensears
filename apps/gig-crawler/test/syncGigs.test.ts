@@ -145,7 +145,59 @@ describe("SyncGigsCommand", () => {
     expect(port.count()).toBe(1);
   });
 
-  it("matches a gig with no stable link by title + day + venue (no duplicate)", async () => {
+  it("collapses the same event across different venue text (aggregator placeholder)", async () => {
+    // The Tito & Tarantula prod duplicate: fuzzclub.gr says "Fuzz Club", more.com's
+    // multi-city tour page says "Multiple venues". Identity is title+day, so the venue
+    // difference must not split the event in two.
+    const port = new InMemoryGigsPort();
+    const stats = await runSync(port, [
+      makeGig({
+        title: "TITO & TARANTULA",
+        venueName: "Fuzz Club",
+        url: "https://www.fuzzclub.gr/event/tito-tarantula/",
+      }),
+      makeGig({
+        title: "TITO & TARANTULA live in Greece!",
+        venueName: "Multiple venues",
+        url: "https://www.more.com/gr-en/tickets/music/tito-tarantula-live-in-greece/",
+        price: "€25",
+      }),
+    ]);
+    expect(stats.gigsExtracted).toBe(1);
+    expect(port.count()).toBe(1);
+    expect(port.first().price).toBe("€25"); // backfilled from the absorbed copy
+  });
+
+  it("keeps the stored venue when another source's copy carries different venue text", async () => {
+    const port = new InMemoryGigsPort();
+    const venueId = await port.getOrCreateVenue("Fuzz Club");
+    await port.createGig(
+      {
+        title: "TITO & TARANTULA",
+        date: TEST_DATE,
+        venueName: "Fuzz Club",
+        genres: ["rock"],
+        url: "https://www.fuzzclub.gr/event/tito-tarantula/",
+        source: "fuzz-club",
+        sourceKey: "https://www.fuzzclub.gr/event/tito-tarantula",
+      },
+      venueId
+    );
+
+    const stats = await runSync(port, [
+      makeGig({
+        title: "TITO & TARANTULA live in Greece!",
+        venueName: "Multiple venues",
+        url: "https://www.more.com/gr-en/tickets/music/tito-tarantula-live-in-greece/",
+        price: "€25",
+      }),
+    ]);
+    expect(stats.gigsCreated).toBe(0);
+    expect(port.count()).toBe(1);
+    expect(port.first().venueName).toBe("Fuzz Club"); // the placeholder never wins
+  });
+
+  it("matches a gig with no stable link by title + day (no duplicate)", async () => {
     const port = new InMemoryGigsPort();
     await runSync(port, [makeGig({ title: "No Link Band", url: "" })]);
     const stats = await runSync(port, [makeGig({ title: "No Link Band", url: "", price: "€5" })]);

@@ -15,7 +15,8 @@ import {
   type SyncOptions,
   type SyncStats,
 } from "../src/commands/SyncGigsCommand.js";
-import { normalizeTitle, titlesLikelySame } from "../src/utils/normalize.js";
+import { normalizeTitle } from "../src/utils/normalize.js";
+import { titlesLikelySame } from "../src/utils/titleMatch.js";
 import { normalizeVenueName } from "../src/models/venueAliases.js";
 
 /** A scraper that always succeeds with trivial content - the fake LLM ignores it anyway. */
@@ -48,7 +49,7 @@ export class FakeLLM implements LLMPort {
 
 /**
  * In-memory GigsPort that honours the contract documented on the port: two-tier matching
- * (stable source+sourceKey, then normalized title + day + canonical venue), partial
+ * (stable source+sourceKey, then normalized title + day), partial
  * updates, and the manual/status flags. Venue names are canonicalized on write, exactly
  * as the Strapi adapter does, so matching behaves like production.
  */
@@ -120,19 +121,17 @@ export class InMemoryGigsPort implements GigsPort {
         }
       }
     }
-    // Tier 2: same calendar day + canonical venue, then exact normalized title first,
-    // falling back to the same-event matcher - mirrors the Strapi adapter.
+    // Tier 2: same calendar day (venue deliberately not matched - identity is
+    // title+day), exact normalized title first, falling back to the same-event
+    // matcher - mirrors the Strapi adapter.
     const day = gig.date.toISOString().slice(0, 10);
     const title = normalizeTitle(gig.title);
-    const venue = normalizeVenueName(gig.venueName).toLowerCase();
-    const sameVenue = [...this.gigs.values()].filter(
-      (g) =>
-        g.date.toISOString().slice(0, 10) === day &&
-        normalizeVenueName(g.venueName).toLowerCase() === venue
+    const sameDay = [...this.gigs.values()].filter(
+      (g) => g.date.toISOString().slice(0, 10) === day
     );
     const match =
-      sameVenue.find((g) => normalizeTitle(g.title) === title) ??
-      sameVenue.find((g) => titlesLikelySame(g.title, gig.title));
+      sameDay.find((g) => normalizeTitle(g.title) === title) ??
+      sameDay.find((g) => titlesLikelySame(g.title, gig.title));
     return match ? { ...match } : null;
   }
   async createGig(gig: Gig, venueId: number): Promise<number> {

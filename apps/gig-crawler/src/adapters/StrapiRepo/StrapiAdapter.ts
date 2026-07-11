@@ -10,7 +10,8 @@ import { logger } from "../../utils/logger.js";
 import { retry } from "../../utils/retry.js";
 import { env } from "../../models/env.js";
 import { normalizeVenueName } from "../../models/venueAliases.js";
-import { normalizeTitle, titlesLikelySame } from "../../utils/normalize.js";
+import { normalizeTitle } from "../../utils/normalize.js";
+import { titlesLikelySame } from "../../utils/titleMatch.js";
 
 export class StrapiAdapter implements GigsPort {
   private readonly client: AxiosInstance;
@@ -138,8 +139,11 @@ export class StrapiAdapter implements GigsPort {
           }
         }
 
-        // Tier 2: same calendar day + canonical venue, then title matching. Catches gigs
-        // with no stable key yet (legacy rows) and cases where the winning source flipped.
+        // Tier 2: same calendar day, then title matching. Catches gigs with no stable key
+        // yet (legacy rows) and cases where the winning source flipped. The venue is
+        // deliberately NOT matched on: the same event can carry different venue text
+        // across sources (drifted spellings, aggregator placeholders like "Multiple
+        // venues"), and the same act does not play two venues on one night.
         const dateStr = gig.date.toISOString().split("T")[0];
         const res = await this.client.get("/api/gigs", {
           params: {
@@ -152,17 +156,12 @@ export class StrapiAdapter implements GigsPort {
         const parsed = StrapiGigResponseSchema.parse(res.data);
         const rows = Array.isArray(parsed.data) ? parsed.data : parsed.data ? [parsed.data] : [];
         const wantedTitle = normalizeTitle(gig.title);
-        const wantedVenue = normalizeVenueName(gig.venueName).toLowerCase();
-        const sameVenue = rows.filter((g) => {
-          const vName = g.venue && typeof g.venue === "object" ? g.venue.name : "";
-          return normalizeVenueName(vName).toLowerCase() === wantedVenue;
-        });
         // Exact normalized title first (the store may already hold near-duplicate rows),
         // then the same-event matcher (subset billing / small typo) so run-over-run title
         // drift updates its existing row instead of creating a duplicate.
         const match =
-          sameVenue.find((g) => normalizeTitle(g.title) === wantedTitle) ??
-          sameVenue.find((g) => titlesLikelySame(g.title, gig.title));
+          rows.find((g) => normalizeTitle(g.title) === wantedTitle) ??
+          rows.find((g) => titlesLikelySame(g.title, gig.title));
         return match ? this.toStoredGig(match) : null;
       },
       {

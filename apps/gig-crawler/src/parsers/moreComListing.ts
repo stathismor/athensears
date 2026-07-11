@@ -1,7 +1,7 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import type { Gig } from "../models/gig.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
-import { ACTIVE_CITY, isExcludedLocale } from "../models/city.js";
+import { ACTIVE_CITY, isExcludedLocale, placeTailAliases } from "../models/city.js";
 import { cleanEventTitle } from "../utils/cleanTitle.js";
 import { logger } from "../utils/logger.js";
 
@@ -142,7 +142,7 @@ export function parseMoreComListing(html: string, baseUrl: string, dateRange: Da
 
     const venueName = normalizeVenueName(venueRaw);
     gigs.push({
-      title: cleanEventTitle(rawTitle, venueName, ACTIVE_CITY.nameAliases),
+      title: cleanEventTitle(rawTitle, venueName, placeTailAliases()),
       date,
       venueName,
       url,

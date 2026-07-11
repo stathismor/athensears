@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { normalizeTitle, titlesLikelySame } from "../src/utils/normalize.js";
+import { normalizeTitle } from "../src/utils/normalize.js";
 import { normalizeVenueName } from "../src/models/venueAliases.js";
 import { cleanEventTitle } from "../src/utils/cleanTitle.js";
 import { normalizePrice } from "../src/utils/normalizePrice.js";
+import { placeTailAliases } from "../src/models/city.js";
 
 // These are the building blocks of gig identity/dedup, so their behaviour is what makes
 // "the same event from two sources" resolve to one row.
@@ -20,27 +21,6 @@ describe("normalizeTitle", () => {
 
   it("folds ALL-CAPS and mixed-case Greek to the same form", () => {
     expect(normalizeTitle("ΘΟΔΩΡΗΣ ΜΑΡΑΝΤΙΝΗΣ")).toBe(normalizeTitle("Θοδωρης Μαραντινης"));
-  });
-});
-
-describe("titlesLikelySame", () => {
-  it("matches a partial billing (token subset)", () => {
-    expect(titlesLikelySame("Krista Papista", "Krista Papista Heartmode")).toBe(true);
-    expect(titlesLikelySame("EJEKT FESTIVAL 2026", "EJEKT FESTIVAL")).toBe(true);
-    expect(titlesLikelySame("The Cure", "Florence + The Machine, The Cure")).toBe(true);
-  });
-
-  it("tolerates a small typo in long titles", () => {
-    expect(titlesLikelySame("MONSIER MINIMAL", "Monsieur Minimal")).toBe(true);
-    expect(titlesLikelySame("Ευρυδικη - Θοδωρης Μαραντινης", "ΕΥΡΙΔΙΚΗ - ΘΟΔΩΡΗΣ ΜΑΡΑΝΤΙΝΗΣ")).toBe(
-      true
-    );
-  });
-
-  it("never fuzzy-matches differing digits or short titles", () => {
-    expect(titlesLikelySame("Temple Live 11/7", "Temple Live 12/7")).toBe(false);
-    expect(titlesLikelySame("AC/DC", "AB/DC")).toBe(false);
-    expect(titlesLikelySame("Band A", "Band B")).toBe(false);
   });
 });
 
@@ -87,6 +67,24 @@ describe("cleanEventTitle", () => {
 
   it("strips a trailing country tag", () => {
     expect(cleanEventTitle("Elder (USA)")).toBe("Elder");
+  });
+
+  it("strips a '(live) in/at <city-or-country>' marketing tail", () => {
+    expect(cleanEventTitle("Elder (USA) live in Athens", "", placeTailAliases())).toBe("Elder");
+    expect(cleanEventTitle("TITO & TARANTULA live in Greece!", "", placeTailAliases())).toBe(
+      "TITO & TARANTULA"
+    );
+    expect(cleanEventTitle("Μπάντα live στην Ελλάδα", "", placeTailAliases())).toBe("Μπάντα");
+    // A venue may sit between the preposition and the place; it belongs to the same tail.
+    expect(cleanEventTitle("NOGA EREZ live in Technopolis Athens", "", placeTailAliases())).toBe(
+      "NOGA EREZ"
+    );
+  });
+
+  it("leaves non-active-place 'live in' tails alone", () => {
+    expect(
+      cleanEventTitle("Thin Lizzy: Live and Dangerous in London", "", placeTailAliases())
+    ).toBe("Thin Lizzy: Live and Dangerous in London");
   });
 
   it("keeps co-headline bills intact", () => {

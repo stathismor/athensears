@@ -2,9 +2,9 @@ import type { GigsPort, StoredGig } from "../ports/GigsPort.js";
 import type { Gig } from "../models/gig.js";
 import { cleanEventTitle } from "../utils/cleanTitle.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
-import { titleTokens, titlesLikelySame } from "../utils/normalize.js";
-import { ACTIVE_CITY } from "../models/city.js";
-import { activeSources } from "../models/sources.js";
+import { titleTokens, titlesLikelySame } from "../utils/titleMatch.js";
+import { placeTailAliases } from "../models/city.js";
+import { activeSources, GIG_SOURCES } from "../models/sources.js";
 import { logger } from "../utils/logger.js";
 
 /** A title/venue that the cleaners would rewrite in place. */
@@ -51,8 +51,9 @@ function completeness(g: StoredGig): number {
  * the sync applies at write time) and, where the result differs, updates the row -
  * preserving its documentId (so permalinks survive) and its status/provenance/lastSeenAt
  * (Strapi's partial update leaves untouched anything we don't send). When two rows on the
- * same day+venue name the same event (equal, subset-billing or small-typo titles - the
- * sync's matcher), it keeps the better-linked/more-complete one under the fullest billing,
+ * same day name the same event (equal, subset-billing or small-typo titles - the sync's
+ * matcher; the venue is deliberately not part of identity), it keeps the
+ * better-linked/more-complete one under the fullest billing and the best-sourced venue,
  * backfills its missing fields from the duplicate, and deletes the duplicate.
  *
  * Idempotent and safe to re-run whenever the cleaning rules change. It always leaves
@@ -63,12 +64,17 @@ export class RepairGigsCommand {
   constructor(private readonly gigs: GigsPort) {}
 
   async execute(): Promise<RepairReport> {
-    const city = ACTIVE_CITY.nameAliases;
+    const placeAliases = placeTailAliases();
 
     // Specific event page (2) > generic listing page (1) > no link (0) - which link to keep
     // when merging duplicates (mirrors the sync's dedup url scoring).
     const listingUrls = new Set(activeSources().flatMap((s) => s.listingUrls));
     const urlScore = (u?: string): number => (!u ? 0 : listingUrls.has(u) ? 1 : 2);
+    // Whether a row's venue was registry-stamped by a venue-type source (ground truth)
+    // rather than extracted by an aggregator. The full registry (not just enabled
+    // sources) so rows from a since-disabled source keep their provenance.
+    const isVenueSourced = (g: StoredGig): boolean =>
+      GIG_SOURCES.some((s) => s.id === g.source && s.type === "venue");
 
     const all = await this.gigs.listAllGigs();
     const report: RepairReport = {
@@ -98,13 +104,14 @@ export class RepairGigsCommand {
     });
     report.scanned = considered.length;
 
-    // Derive the cleaned/canonical form for each gig, grouped by day + canonical venue.
+    // Derive the cleaned/canonical form for each gig, grouped by calendar day. Identity
+    // is title+day, same as the sync's dedup - the venue deliberately plays no part.
     type Desired = { gig: StoredGig; cleanTitle: string; canonicalVenue: string };
     const groups = new Map<string, Desired[]>();
     for (const gig of considered) {
       const canonicalVenue = normalizeVenueName(gig.venueName);
-      const cleanTitle = cleanEventTitle(gig.title, canonicalVenue, city);
-      const key = `${gig.date.toISOString().slice(0, 10)}|${canonicalVenue.toLowerCase()}`;
+      const cleanTitle = cleanEventTitle(gig.title, canonicalVenue, placeAliases);
+      const key = gig.date.toISOString().slice(0, 10);
       const entry = { gig, cleanTitle, canonicalVenue };
       const arr = groups.get(key);
       if (arr) {
@@ -114,7 +121,7 @@ export class RepairGigsCommand {
       }
     }
 
-    // Within each day+venue, cluster the rows that name the same event (equal, subset
+    // Within each day, cluster the rows that name the same event (equal, subset
     // billing, or small-typo titles - the sync's matcher), fullest title first so each
     // cluster's first member carries the fullest billing.
     const clusters: Desired[][] = [];
@@ -146,6 +153,10 @@ export class RepairGigsCommand {
         const keeper = cluster[0];
         const losers = cluster.slice(1);
 
+        // Venue by provenance: a venue-type source's registry-stamped venue beats an
+        // aggregator's extracted text (e.g. more.com's "Multiple venues" placeholder).
+        const venueOwner = cluster.find((d) => isVenueSourced(d.gig)) ?? keeper;
+
         // Backfill the keeper's missing fields from the duplicates, and adopt the best link.
         const bestUrl = cluster
           .map((d) => d.gig.url)
@@ -153,7 +164,7 @@ export class RepairGigsCommand {
         const merged: Gig = {
           title: fullestTitle,
           date: keeper.gig.date,
-          venueName: keeper.canonicalVenue,
+          venueName: venueOwner.canonicalVenue,
           url: bestUrl,
           price: keeper.gig.price ?? losers.find((d) => d.gig.price)?.gig.price,
           description:

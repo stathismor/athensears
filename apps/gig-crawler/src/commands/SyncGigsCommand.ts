@@ -5,12 +5,8 @@ import type { Gig } from "../models/gig.js";
 import type { ScrapedContent } from "../models/scrapedContent.js";
 import { activeSources, type GigSource } from "../models/sources.js";
 import { normalizeVenueName } from "../models/venueAliases.js";
-import {
-  normalizeTitle,
-  titleTokens,
-  isStrictSubset,
-  titlesLikelySame,
-} from "../utils/normalize.js";
+import { normalizeTitle } from "../utils/normalize.js";
+import { titleTokens, isStrictSubset, titlesLikelySame } from "../utils/titleMatch.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../models/env.js";
 import { parseMoreComListing, extractMoreComOtherUrls } from "../parsers/moreComListing.js";
@@ -309,17 +305,28 @@ export class SyncGigsCommand {
                 continue;
               }
 
-              const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
-
               if (existing) {
-                // The matcher tolerates title drift (subset billings, small typos), so
-                // keep the stored display title unless this run's is strictly fuller -
-                // adopting every source's rewording would flip-flop titles run over run.
+                // The matcher tolerates venue drift (identity is title+day), so decide
+                // which venue to keep: the same source's venue update is adopted (a real
+                // correction), a venue-type source's registry-stamped venue always wins,
+                // but a different source's extracted venue never overwrites the stored
+                // one - that's how an aggregator placeholder like "Multiple venues"
+                // would clobber a real venue.
+                const venueName =
+                  sources.some((s) => s.id === gig.source && s.type === "venue") ||
+                  gig.source === existing.source ||
+                  !existing.venueName.trim()
+                    ? gig.venueName
+                    : existing.venueName;
+                const venueId = await this.gigs.getOrCreateVenue(venueName);
+                // Likewise for title drift (subset billings, small typos): keep the
+                // stored display title unless this run's is strictly fuller - adopting
+                // every source's rewording would flip-flop titles run over run.
                 const toWrite =
                   gig.title !== existing.title &&
                   !isStrictSubset(titleTokens(existing.title), titleTokens(gig.title))
-                    ? { ...gig, title: existing.title }
-                    : gig;
+                    ? { ...gig, venueName, title: existing.title }
+                    : { ...gig, venueName };
                 if (this.gigChanged(existing, toWrite)) {
                   await this.gigs.updateGig(existing.documentId, toWrite, venueId, {
                     manual: false,
@@ -332,6 +339,7 @@ export class SyncGigsCommand {
                   seenDocIds.push(existing.documentId);
                 }
               } else {
+                const venueId = await this.gigs.getOrCreateVenue(gig.venueName);
                 await this.gigs.createGig(gig, venueId);
                 stats.gigsCreated++;
                 affected.created.push(this.gigLabel(gig));
@@ -443,7 +451,12 @@ export class SyncGigsCommand {
 
   /**
    * Collapse duplicates of the same event surfaced by multiple sources (e.g. a venue
-   * site + an aggregator) using a punctuation-normalized title + day + venue key.
+   * site + an aggregator) using a punctuation-normalized title + day key. The venue is
+   * deliberately NOT part of identity: the same act doesn't play two venues on one night,
+   * while the same event often carries different venue text across sources (a drifted
+   * spelling, or an aggregator placeholder like more.com's "Multiple venues" for a
+   * multi-city tour). Instead the merged record's venue is picked by provenance - a
+   * venue-type source's registry-stamped venue beats an aggregator's extracted text.
    * Keeps the record with the best link (specific event page > generic listing > none)
    * and backfills missing price/description/genre/image from the discarded copy.
    */
@@ -455,14 +468,19 @@ export class SyncGigsCommand {
       }
       return listingUrls.has(url) ? 1 : 2; // generic listing vs specific event page
     };
+    const isVenueSourced = (g: Gig): boolean =>
+      sources.some((s) => s.id === g.source && s.type === "venue");
     // Merge `b` into `a`, keeping `keepTitle ? a's : the better-linked` title, adopting the
-    // better link and backfilling any field the kept record is missing.
+    // better link and the better-sourced venue, and backfilling any field the kept record
+    // is missing.
     const merge = (a: Gig, b: Gig, keepTitle: boolean): Gig => {
       const base = keepTitle || urlScore(a.url) >= urlScore(b.url) ? a : b;
       const other = base === a ? b : a;
       const better = urlScore(a.url) >= urlScore(b.url) ? a : b;
       return {
         ...base,
+        venueName:
+          !isVenueSourced(base) && isVenueSourced(other) ? other.venueName : base.venueName,
         url: better.url || base.url || other.url,
         price: base.price ?? other.price,
         description: base.description ?? other.description,
@@ -470,23 +488,22 @@ export class SyncGigsCommand {
         imageUrl: base.imageUrl ?? other.imageUrl,
       };
     };
-    const dayVenueKey = (g: Gig): string =>
-      `${g.date.toISOString().slice(0, 10)}|${normalizeVenueName(g.venueName).toLowerCase()}`;
+    const dayKey = (g: Gig): string => g.date.toISOString().slice(0, 10);
 
-    // Pass 1: exact match on normalized title + day + canonical venue (punctuation variants).
+    // Pass 1: exact match on normalized title + day (punctuation/script variants).
     const byKey = new Map<string, Gig>();
     for (const gig of gigs) {
-      const key = `${normalizeTitle(gig.title)}|${dayVenueKey(gig)}`;
+      const key = `${normalizeTitle(gig.title)}|${dayKey(gig)}`;
       const existing = byKey.get(key);
       byKey.set(key, existing ? merge(existing, gig, false) : gig);
     }
 
-    // Pass 2: within the same day+venue, collapse titles that name the same event - a
+    // Pass 2: within the same day, collapse titles that name the same event - a
     // billing that is a token-subset of a fuller one ("Megadeth" into "Megadeth /
     // Sepultura") or a small-typo variant ("MONSIER MINIMAL") - keeping the fuller title.
     const groups = new Map<string, Gig[]>();
     for (const gig of byKey.values()) {
-      const k = dayVenueKey(gig);
+      const k = dayKey(gig);
       const arr = groups.get(k);
       if (arr) {
         arr.push(gig);
@@ -515,9 +532,7 @@ export class SyncGigsCommand {
     // shared specific url is a strong "same event" signal, so this won't merge two distinct
     // same-named shows that each have their own page.
     const seriesKeyOf = (g: Gig): string | null =>
-      g.url && !listingUrls.has(g.url)
-        ? `${normalizeTitle(g.title)}|${normalizeVenueName(g.venueName).toLowerCase()}|${g.url}`
-        : null;
+      g.url && !listingUrls.has(g.url) ? `${normalizeTitle(g.title)}|${g.url}` : null;
     const chosen = new Map<string, Gig>();
     const order: Array<string | Gig> = [];
     for (const gig of result) {

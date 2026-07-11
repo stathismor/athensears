@@ -1,4 +1,4 @@
-import { editDistanceAtMost } from "./normalize.js";
+import { editDistanceAtMost } from "./titleMatch.js";
 
 /**
  * Country codes/names that sources append to disambiguate touring acts, e.g. "CRO-MAGS
@@ -123,7 +123,7 @@ const PLACE_TYPE_STEMS = [
 function isPlaceLikeTail(
   segment: string,
   venueTokens: ReadonlySet<string>,
-  cityTokens: ReadonlySet<string>
+  placeTokens: ReadonlySet<string>
 ): boolean {
   const toks = significantTokens(segment);
   if (toks.length === 0) {
@@ -132,7 +132,9 @@ function isPlaceLikeTail(
   if (venueTokens.size > 0 && toks.every((t) => venueTokens.has(t))) {
     return true;
   }
-  return toks.some((t) => cityTokens.has(t) || PLACE_TYPE_STEMS.some((stem) => t.startsWith(stem)));
+  return toks.some(
+    (t) => placeTokens.has(t) || PLACE_TYPE_STEMS.some((stem) => t.startsWith(stem))
+  );
 }
 
 /** Replace fancy dashes (figure/en/em/horizontal-bar/minus) with a plain ASCII hyphen. */
@@ -274,8 +276,9 @@ function escapeRegExp(s: string): string {
  *     of the known venue or something built around a generic place word ("… - Κέντρο
  *     Πολιτισμού Ελληνικός Κόσμος", "… - Φ hill Sessions Λόφος Φιλοπάππου");
  *  2c. a trailing date fragment - e.g. "The Young Gods , 2/10" -> "The Young Gods";
- *  3. a trailing "(live) in/at <city>" tail - e.g. "Elder (USA) live in Athens" (driven
- *     by `cityAliases` so it generalizes to any city);
+ *  3. a trailing "(live) in/at <place>" tail, place being the active city or its country -
+ *     e.g. "Elder (USA) live in Athens", "TITO & TARANTULA live in Greece!" (driven by
+ *     `placeAliases` - see `placeTailAliases()` - so it generalizes to any city);
  *  4. a trailing country tag: "(US)", "(USA)", "(FR)";
  *  5. trailing subtitle noise: anniversary tags, quoted show names, "| …" tails.
  *
@@ -285,7 +288,7 @@ function escapeRegExp(s: string): string {
 export function cleanEventTitle(
   raw: string,
   venueName = "",
-  cityAliases: readonly string[] = []
+  placeAliases: readonly string[] = []
 ): string {
   let t = raw.trim();
 
@@ -306,10 +309,11 @@ export function cleanEventTitle(
 
   // 2) Trailing venue/location suffix. "@" needs no trailing space (sources write
   //    "Artist @Venue" glued together, e.g. "… @Στοά Culture"); "at" does, so it stays a
-  //    whole word and never eats "… at" mid-name.
+  //    whole word and never eats "… at" mid-name. An optional "live" before the
+  //    preposition goes with it ("Μπάντα live στην Ελλάδα", "Band live at Fuzz").
   t = t
-    .replace(/\s+(?:@\s*|\bat\s+).+$/iu, "")
-    .replace(/\s+στ(?:α|ο|η|ην|ον|ις|ους)\s+.+$/iu, "")
+    .replace(/\s+(?:live\s+)?(?:@\s*|\bat\s+).+$/iu, "")
+    .replace(/\s+(?:live\s+)?στ(?:α|ο|η|ην|ον|ις|ους)\s+.+$/iu, "")
     .trim();
 
   // 2b) Trailing venue/location/series tail(s). Sources pad titles with the venue, the
@@ -318,10 +322,10 @@ export function cleanEventTitle(
   //     Strip them from the end while the last dash-segment looks like a place - but always
   //     keep the leading act, so co-headline bills ("A - B", B an act) survive intact.
   const venueNameTokens = new Set(significantTokens(venueName));
-  const cityTokens = new Set(cityAliases.map((a) => foldText(a)));
+  const placeTokens = new Set(placeAliases.map((a) => foldText(a)));
   for (let i = 0; i < 3; i++) {
     const m = t.match(/^(.*\S)\s+[-–—]\s+(\S.*)$/u);
-    if (!m || !isPlaceLikeTail(m[2], venueNameTokens, cityTokens)) {
+    if (!m || !isPlaceLikeTail(m[2], venueNameTokens, placeTokens)) {
       break;
     }
     t = m[1].trim();
@@ -336,12 +340,18 @@ export function cleanEventTitle(
   //     fold-and-fuzzy token matching, see stripTrailingWrittenDate.
   t = stripTrailingWrittenDate(t);
 
-  // 3) Trailing "(live) in/at <city>" tail (e.g. "Elder (USA) live in Athens").
-  if (cityAliases.length > 0) {
-    const alt = cityAliases.map(escapeRegExp).join("|");
+  // 3) Trailing "(live) in/at <city-or-country>" tail (e.g. "Elder (USA) live in Athens",
+  //    "TITO & TARANTULA live in Greece!"). Up to a few words may sit between the
+  //    preposition and the place - a venue or qualifier that belongs to the same tail
+  //    ("NOGA EREZ live in Technopolis Athens").
+  if (placeAliases.length > 0) {
+    const alt = placeAliases.map(escapeRegExp).join("|");
     t = t
       .replace(
-        new RegExp(`\\s+(?:live\\s+)?(?:in|at|στ(?:ην|η|ον|α|ο))\\s+(?:${alt})\\b.*$`, "iu"),
+        new RegExp(
+          `\\s+(?:live\\s+)?(?:in|at|στ(?:ην|η|ον|α|ο))\\s+(?:\\S+\\s+){0,3}(?:${alt})\\b.*$`,
+          "iu"
+        ),
         ""
       )
       .trim();

@@ -9,7 +9,7 @@ import { GIG_EXTRACTION_BATCH_PROMPT } from "../../prompts/gigExtractionBatch.js
 import { EVENT_LINK_FILTER_PROMPT } from "../../prompts/eventLinkFilter.js";
 import { cleanEventTitle } from "../../utils/cleanTitle.js";
 import { normalizePrice } from "../../utils/normalizePrice.js";
-import { ACTIVE_CITY } from "../../models/city.js";
+import { placeTailAliases } from "../../models/city.js";
 import { env } from "../../models/env.js";
 import { PageExtractionCache } from "../CacheRepo/PageExtractionCache.js";
 
@@ -174,7 +174,7 @@ function buildGigsFromData(
 
       const venueName = gigData.venue_name || "Unknown Venue";
       gigs.push({
-        title: cleanEventTitle(gigData.title, venueName, ACTIVE_CITY.nameAliases),
+        title: cleanEventTitle(gigData.title, venueName, placeTailAliases()),
         date,
         venueName,
         description: gigData.description,
@@ -253,7 +253,7 @@ export class GeminiAdapter implements LLMPort {
           .filter((g) => isWithinRange(g.date, dateRange))
           .map((g) => ({
             ...g,
-            title: cleanEventTitle(g.title, g.venueName, ACTIVE_CITY.nameAliases),
+            title: cleanEventTitle(g.title, g.venueName, placeTailAliases()),
           }));
         cacheHitGigs.push(...inWindow);
         logger.debug(
