@@ -51,9 +51,17 @@ Extract all upcoming music events from ALL the pages below that match the genre 
 2. Only extract future events (skip past events)
 3. **Date accuracy (STRICT):** If the page does NOT show a specific day AND month for an event, produce ZERO events from that page. NEVER guess, infer, or default to today's date. A year alone (e.g. "2026") is NOT a valid date. A month alone (e.g. "July") is NOT a valid date. You need at minimum a day and month (e.g. "5 July", "05/07/2026")
 4. Use the venue name from the content, not generic descriptions
-5. **Title format:** Keep titles concise with ONLY the artist/band name. DO NOT include the venue in the title. If the title contains "@" or "at", remove everything after it. Examples:
+5. **Title format:** The title must be ONLY the act's name (artist/band, or the festival/event name for multi-band bills). Strip everything the source appended around it:
+   - venue or location ("@ X", "at X", "στο/στη X", "live in ${ACTIVE_CITY.name}")
+   - dates in any form, numeric or written out, any language ("2/10", "Σάββατο 19 Σεπτεμβρίου", "Saturday 19 September 2026")
+   - subtitles and tags: tour/show/album names in quotes, anniversary tags, country tags ("(US)"), "live", "presents", edition numbers ("vol. 4")
+   - leftover separators at the start/end (":", "-", "|", ",")
+   Examples:
    - "Wildfire @ KYTTARO" → "Wildfire"
-   - "Band Name at Venue" → "Band Name"
+   - "Groove Therapist & Daenoma Σάββατο 19 Σεπτεμβρίου" → "Groove Therapist & Daenoma"
+   - 'Kawir: 30 Years "To Cavirs":' → "Kawir"
+   - "MONSIEUR MINIMAL 'Μουσικός Δείπνος' live" → "Monsieur Minimal"
+   Keep co-headline bills intact: "Megadeth / Sepultura" stays "Megadeth / Sepultura"
 6. **Price format:** Return only the minimum/starting price as "€X". If you see multiple prices, pick the lowest. Common indicators: "€", "EUR", "euro", "price", "admission", "tickets", "entrance fee". If no price is found, use "N/A"
 7. **Ticket links:** Look for full ticket purchase URLs (not bare domains). Only include a ticket_url if you find a complete URL with a path to the specific event page
 8. **URL field:** For each event, set "url" to the "Source URL" shown at the top of the page where you found the event
