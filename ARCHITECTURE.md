@@ -90,6 +90,12 @@ flags). Walking a hand-maintained list rather than searching the web is what kee
 run deterministic, cheap and high-signal: noise never enters in the first place. Adding a
 venue is a one-line registry entry; a source can be disabled without deleting it.
 
+One hard rule for venue sources: the listing URL must be a genuine venue calendar. A
+keyword-search page on an aggregator looks similar but also surfaces *other* venues'
+events, and because a venue source stamps its venue name onto everything it yields, such a
+page mislabels foreign events wholesale (this happened with allevents.in "venue" pages,
+now disabled in the registry).
+
 The crawler leans on three external capabilities, each hidden behind an internal port so
 the core logic never depends on a concrete vendor.
 
@@ -132,11 +138,18 @@ A run is a single operation with one clear result summary. It proceeds in these 
      labelling each kept act with up to three genres and rejecting anything out of taste.
      For venue sources, the registry's canonical venue name is stamped onto every gig,
      eliminating venue-name drift. For aggregator sources the venue is extracted per event
-     and normalized against an alias map. Each gig is also stamped with the id of the source
-     that produced it and a stable per-event key (see Identity below).
+     and normalized against an alias map that ignores case, accents, punctuation and
+     Greek/Latin look-alike letters, so spelling variants of the same venue collapse. Titles
+     are reduced to the bare act name: the model is instructed to strip venue tags, dates,
+     and subtitles, and a deterministic cleaner backstops it (tolerating single-letter typos
+     in written-out dates). Each gig is also stamped with the id of the source that produced
+     it and a stable per-event key (see Identity below).
    - **Cache use.** Before extracting a page, the crawler checks whether the same page
      content was seen recently; if so it replays the previously extracted gigs instead of
-     calling the model. New extractions are recorded to be flushed at the end of the run.
+     calling the model. Replayed titles are re-run through the current cleaning rules, so a
+     rule change takes effect everywhere without re-extraction (and a repair's fixes are
+     never undone by a stale replay). New extractions are recorded to be flushed at the end
+     of the run.
 
 5. **Refine the extraction (optional passes).**
 
@@ -283,7 +296,8 @@ The three write modes do very different things. `force` and `clear` both re-fetc
 sources (differing only in whether existing gigs are wiped first); `repair` never touches
 the network or the model - it only re-processes rows already stored. So: a normal run to
 fetch what's new, `force` to re-extract past a stale cache, `clear` to rebuild from scratch,
-and `repair` to bring stored titles/venues in line after the cleaning rules change.
+and `repair` to bring stored titles/venues in line and collapse stored duplicates after
+the cleaning or matching rules change.
 
 Sync (scrape) options:
 
@@ -299,7 +313,7 @@ Repair options:
 
 | Option | Effect |
 |---|---|
-| repair | Re-apply the current title/venue cleaning rules to gigs already stored, in place (no scrape, no model calls). Run it after the cleaning rules change. Idempotent, and it leaves manual gigs untouched |
+| repair | Re-apply the current title/venue cleaning rules to gigs already stored, in place (no scrape, no model calls), and merge rows that now resolve to the same event (same day and venue, equal/subset/near-identical titles), keeping the better-linked row and deleting the duplicate. Run it after the cleaning rules change. Idempotent, and it leaves manual gigs untouched |
 
 Delete options:
 
