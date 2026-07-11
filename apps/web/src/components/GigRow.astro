@@ -137,6 +137,11 @@ const linkClass = `underline underline-offset-4 ${focusClass}`;
         )
       }
 
+      {
+        /* The ticket anchor renders even without a price - its ::after overlay is what
+          makes the whole row tappable - but only a real price is shown; a no-price row
+          keeps the link text screen-reader-only instead of a filler like "Info". */
+      }
       <div class="mt-0.5 text-sm font-bold text-accent">
         {
           gig.url ? (
@@ -147,7 +152,7 @@ const linkClass = `underline underline-offset-4 ${focusClass}`;
               aria-label={`Tickets for ${gig.title}`}
               class={`${focusClass} inline-block after:absolute after:inset-0 after:content-['']`}
             >
-              {gig.price || 'Info'}
+              {gig.price ? gig.price : <span class="sr-only">Tickets</span>}
             </a>
           ) : gig.price ? (
             <span>{gig.price}</span>
