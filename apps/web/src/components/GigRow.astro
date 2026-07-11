@@ -21,7 +21,10 @@ const linkClass =
 ---
 
 <div
-  class:list={['-mx-4 px-4 transition-colors hover:bg-paper/60', divider && 'border-t border-line']}
+  class:list={[
+    '-mx-3 px-3 transition-colors hover:bg-paper/60 sm:-mx-4 sm:px-4',
+    divider && 'border-t border-line',
+  ]}
 >
   {/* Desktop row */}
   <div class="hidden gig-cols items-center gap-6 py-2 sm:grid">
@@ -84,13 +87,21 @@ const linkClass =
 
   {/* Mobile card */}
   <div class="flex gap-3 py-2 sm:hidden">
-    <div class="flex w-8 shrink-0 flex-col pt-0.5 text-center font-sans leading-none">
+    {
+      /* Stretches to the row height (flex default) and distributes its three lines
+        across it, so the month's baseline lands where the price line ends. */
+    }
+    <div class="flex w-8 shrink-0 flex-col justify-between text-center font-sans leading-none">
       {/* pl offsets the trailing letter-space so the tracked text centers optically */}
-      <span class="pl-[0.28em] text-[0.58rem] font-bold uppercase tracking-[0.28em] text-muted">
+      <span
+        class="pl-[0.28em] pt-0.5 text-[0.58rem] font-bold uppercase tracking-[0.28em] text-muted"
+      >
         {weekday}
       </span>
       <span class="text-xl font-extrabold leading-none text-accent tabular-nums">{day}</span>
-      <span class="pl-[0.28em] text-[0.58rem] font-bold uppercase tracking-[0.28em] text-muted">
+      <span
+        class="pl-[0.28em] pb-0.5 text-[0.58rem] font-bold uppercase tracking-[0.28em] text-muted"
+      >
         {month}
       </span>
     </div>

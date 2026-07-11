@@ -56,7 +56,7 @@ try {
   <body class="min-h-screen bg-paper text-ink">
     <div class="mx-auto max-w-6xl px-2 py-1.5 sm:px-6 sm:py-3 lg:max-w-7xl lg:px-8">
       <div
-        class="rounded-xl border border-line bg-surface px-4 py-8 shadow-sm shadow-ink/5 sm:rounded-2xl sm:px-8 sm:py-12 lg:px-12 lg:py-14"
+        class="rounded-xl border border-line bg-surface px-3 py-8 shadow-sm shadow-ink/5 sm:rounded-2xl sm:px-8 sm:py-12 lg:px-12 lg:py-14"
       >
         <SiteHeader />
 
@@ -76,7 +76,7 @@ try {
               <div>
                 {groupByMonth(gigs).map((month, mi) => (
                   <section class:list={[mi > 0 && 'mt-8']}>
-                    <div class="sticky top-0 z-10 -mx-4 mb-1 border-b border-line bg-surface px-4 py-2">
+                    <div class="sticky top-0 z-10 -mx-3 mb-1 border-b border-line bg-surface px-3 py-2 sm:-mx-4 sm:px-4">
                       <span class="text-xl font-extrabold uppercase tracking-[0.2em] text-accent">
                         {month.label}
                       </span>
