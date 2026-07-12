@@ -179,7 +179,9 @@ function buildGigsFromData(
         venueName,
         description: gigData.description,
         price: normalizePrice(gigData.price),
-        url: normalizeUrl(gigData.url) || normalizeUrl(gigData.ticket_url) || "",
+        // Prefer the ticket page (what a visitor actually wants) over the source page
+        // the event was found on; fall back to the source page when no ticket link exists.
+        url: normalizeUrl(gigData.ticket_url) || normalizeUrl(gigData.url) || "",
         genres,
         imageUrl: gigData.image_url,
       });
