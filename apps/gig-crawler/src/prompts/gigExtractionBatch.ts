@@ -20,12 +20,18 @@ KEEP events whose music clearly fits one of these (set "genre" to the closest ma
 
 REJECT (do NOT include - set "genre" to "reject" or simply omit the event):
 - Mainstream / commercial pop (Greek or international)
-- Greek popular/laïko/éntechno/skyladiko (λαϊκά, έντεχνο, σκυλάδικα, ελληνικό pop)
+- Greek popular/laïko/éntechno/skyladiko (λαϊκά, έντεχνο, σκυλάδικα, ελληνικό pop). Greek λαϊκό/ρεμπέτικο/tavern-style programs are NEVER "Folk" - Folk in the KEEP list means indie/acoustic singer-songwriter folk
 - Commercial dance/EDM, club DJ nights, techno/house party nights, "mainstream" rave
-- Hip-hop / trap / rap (commercial)
+- DJ sets, club or beach-club residencies and summer party series - any event whose headliner performs a DJ set at a club/beach/restaurant venue, however credible the DJ
+- Event-format nights with no named performing act: open decks, jam sessions, listening or dance parties, participatory synth/vinyl nights
+- Mainstream or pop artists performing a themed/covers program (e.g. pop singers doing a "shades of rock" show) - the theme does not change what the artist is
 - Tribute bands, cover bands, "the music of X" gala nights
 - Stand-up comedy, theatre, musicals, opera galas, kids'/family shows
 - Corporate/branded events, talent shows, TV-personality concerts
+
+**Label the artist, not the blurb.** The genre must describe the performing act's own body
+of work. Marketing copy borrows genre words ("a night of rock", "electronic vibes") - never
+classify an event by those; classify by what the performer is actually known for.
 
 When in doubt about whether something is curated indie taste vs. mainstream, REJECT it.
 
