@@ -33,6 +33,11 @@ const STRONG_REJECT_GENRES = new Set([
   "ethnic",
   "opera",
   "latin",
+  // Club-night marker: on more.com "house" appears only on DJ/beach-club party cards,
+  // sometimes co-tagged with a keep genre (a resident DJ tagged rock+house slips the
+  // keep filter otherwise). Deliberately NOT techno/trance/disco - genuine keeps carry
+  // those as co-tags (Buzz Kull, Light Asylum, Autechre, Combichrist, The Young Gods).
+  "house",
 ]);
 
 /**
